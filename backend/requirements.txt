@@ -1,0 +1,226 @@
+# Core FastAPI and web framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Database
+sqlalchemy
+psycopg2-binary
+alembic
+
+# Data validation and settings
+pydantic
+pydantic-settings
+
+# Authentication and security
+python-jose[cryptography]
+passlib[bcrypt]
+cryptography
+
+# Environment management
+python-dotenv
+
+# OCR and document processing
+pytesseract
+Pillow
+pdf2image
+PyPDF2
+pdfplumber
+opencv-python
+
+# AI and machine learning
+openai
+
+# File handling and utilities
+python-magic
+aiofiles
+
+# HTTP requests
+requests
+httpx
+
+# Date and time handling
+python-dateutil
+
+# Async support
+asyncio
+
+# Data processing
+numpy
+pandas
+
+# Image processing (additional)
+imageio
+
+# Security scanning (optional)
+yara-python
+
+# Logging and monitoring
+structlog
+
+# Background tasks
+celery
+redis
+
+# Email notifications
+smtplib2
+email-validator
+
+# PDF utilities (additional)
+reportlab
+pypdfium2
+
+# Medical data processing
+fhir-resources
+
+# Configuration management
+click
+
+# JSON handling
+orjson
+
+# Timezone handling
+pytz
+
+# File format detection
+filetype
+
+# Progress bars (for long operations)
+tqdm
+
+# Testing dependencies
+pytest
+pytest-asyncio
+pytest-mock
+httpx
+
+# Development tools
+black
+flake8
+isort
+mypy
+
+# Production server (alternative to uvicorn)
+gunicorn
+
+# Memory profiling (development)
+memory-profiler
+
+# API documentation
+sphinx
+
+# Health checks
+psutil
+
+# Caching
+python-memcached
+
+# Queue management
+kombu
+
+# Serialization
+msgpack
+
+# Text processing
+nltk
+spacy
+
+# Statistical analysis
+scipy
+
+# Plotting (for analytics)
+matplotlib
+seaborn
+
+# Configuration validation
+cerberus
+
+# Rate limiting
+slowapi
+
+# CORS handling (already included in FastAPI but explicit)
+python-cors
+
+# Webhook handling
+pyngrok
+
+# Development utilities
+watchdog
+python-multipart
+
+# Backup utilities
+schedule
+
+# Data export
+xlsxwriter
+openpyxl
+
+# Medical coding standards
+fhirclient
+
+# Natural language processing for medical texts
+transformers
+torch
+
+# Database connection pooling
+sqlalchemy-pool
+
+# Async database adapter
+asyncpg
+
+# Job scheduling
+apscheduler
+
+# Monitoring and metrics
+prometheus-client
+
+# Logging formatters
+pythonjsonlogger
+
+# Security headers
+secure
+
+# Input sanitization
+bleach
+
+# Phone number validation
+phonenumbers
+
+# Geographic data
+geopy
+
+# Barcode/QR code processing
+pyzbar
+qrcode
+
+# Document signatures
+cryptography
+# Calendar/appointment handling
+icalendar
+
+# Currency handling
+babel
+
+# Template rendering
+jinja2
+
+# WebSocket support
+websockets
+
+# File compression
+py7zr
+
+# System information
+platform
+
+# Unicode handling
+unidecode
+
+# Retry logic
+tenacity
+
+# Configuration schema
+jsonschema
+
+# Development server reload
+watchfiles
