@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from typing import List, Optional
 from pathlib import Path
 import os
@@ -11,7 +12,8 @@ from ..models.patient import Patient
 from ..models.user import User, UserRole
 from ..schemas.document import (
     DocumentCreate, DocumentUpdate, DocumentResponse, 
-    DocumentListResponse, DocumentAssignmentRequest, DocumentUploadResponse
+    DocumentListResponse, DocumentAssignmentRequest, DocumentUploadResponse,
+    BulkDocumentOperationRequest
 )
 from ..models.clinic import Clinic
 from ..utils.deps import get_current_active_user, require_clinic_access
@@ -284,3 +286,127 @@ async def delete_document(
     db.commit()
     
     return {"message": "Document deleted successfully"}
+
+@router.get("/analytics")
+async def get_document_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_access)
+):
+    """Get document analytics and statistics."""
+    
+    # Get clinic
+    clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+    if not clinic:
+        raise HTTPException(status_code=400, detail="Clinic not found")
+    
+    # Build base query for clinic documents
+    base_query = db.query(Document).filter(Document.clinic_id == clinic.id)
+    
+    # Total documents
+    total = base_query.count()
+    
+    # Documents by status
+    status_stats = db.query(
+        Document.status,
+        func.count(Document.id)
+    ).filter(
+        Document.clinic_id == clinic.id
+    ).group_by(Document.status).all()
+    
+    by_status = {status.value: count for status, count in status_stats}
+    
+    # Documents by type
+    type_stats = db.query(
+        Document.document_type,
+        func.count(Document.id)
+    ).filter(
+        Document.clinic_id == clinic.id
+    ).group_by(Document.document_type).all()
+    
+    by_type = {doc_type.value: count for doc_type, count in type_stats}
+    
+    # Storage used
+    storage_used = db.query(func.sum(Document.file_size)).filter(
+        Document.clinic_id == clinic.id
+    ).scalar() or 0
+    
+    return {
+        "total": total,
+        "byStatus": by_status,
+        "byType": by_type,
+        "storageUsed": storage_used
+    }
+
+@router.post("/bulk")
+async def bulk_document_operation(
+    request: BulkDocumentOperationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_access)
+):
+    """Perform bulk operations on documents."""
+    
+    # Get clinic
+    clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+    if not clinic:
+        raise HTTPException(status_code=400, detail="Clinic not found")
+    
+    # Get documents and verify they belong to clinic
+    documents = db.query(Document).filter(
+        Document.id.in_(request.document_ids),
+        Document.clinic_id == clinic.id
+    ).all()
+    
+    if len(documents) != len(request.document_ids):
+        raise HTTPException(
+            status_code=400,
+            detail="Some documents not found or access denied"
+        )
+    
+    # Perform operation
+    if request.operation == "delete":
+        for doc in documents:
+            delete_file(doc.file_path)
+            db.delete(doc)
+        db.commit()
+        return {"message": f"{len(documents)} documents deleted successfully"}
+    
+    elif request.operation == "assign":
+        if not request.parameters or "patient_id" not in request.parameters:
+            raise HTTPException(status_code=400, detail="patient_id required for assign operation")
+        
+        patient_id = request.parameters["patient_id"]
+        patient = db.query(Patient).filter(
+            Patient.id == patient_id,
+            Patient.clinic_id == clinic.id
+        ).first()
+        
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        
+        for doc in documents:
+            doc.patient_id = patient_id
+        db.commit()
+        return {"message": f"{len(documents)} documents assigned to patient successfully"}
+    
+    elif request.operation == "update_status":
+        if not request.parameters or "status" not in request.parameters:
+            raise HTTPException(status_code=400, detail="status required for update_status operation")
+        
+        new_status = DocumentStatus(request.parameters["status"])
+        for doc in documents:
+            doc.status = new_status
+        db.commit()
+        return {"message": f"{len(documents)} documents status updated successfully"}
+    
+    elif request.operation == "update_type":
+        if not request.parameters or "document_type" not in request.parameters:
+            raise HTTPException(status_code=400, detail="document_type required for update_type operation")
+        
+        new_type = DocumentType(request.parameters["document_type"])
+        for doc in documents:
+            doc.document_type = new_type
+        db.commit()
+        return {"message": f"{len(documents)} documents type updated successfully"}
+    
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown operation: {request.operation}")

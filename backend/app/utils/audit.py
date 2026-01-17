@@ -23,7 +23,7 @@ class AuditLogger:
         clinic_id: Optional[int] = None,
         patient_id: Optional[int] = None,
         changes: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
         request: Optional[Request] = None,
         success: bool = True,
         error_message: Optional[str] = None
@@ -53,7 +53,7 @@ class AuditLogger:
             patient_id=patient_id,
             description=description,
             changes=changes,
-            metadata=metadata,
+            extra_metadata=extra_metadata,
             ip_address=ip_address,
             user_agent=user_agent,
             request_path=request_path,

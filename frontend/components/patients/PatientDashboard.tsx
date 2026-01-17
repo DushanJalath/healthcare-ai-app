@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/router'
 import { Patient, Document, DocumentType, DocumentStatus } from '@/types'
 import PatientStats from './PatientStats'
 import PatientTimeline from './PatientTimeline'
 import PatientDocuments from './PatientDocuments'
+import Navbar from '@/components/layout/Navbar'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
 
@@ -32,6 +34,7 @@ interface PatientDashboardData {
 
 export default function PatientDashboard() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [dashboardData, setDashboardData] = useState<PatientDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'timeline' | 'profile'>('overview')
@@ -40,15 +43,35 @@ export default function PatientDashboard() {
     fetchDashboardData()
   }, [session])
 
+  // Helper function to clear session and redirect to landing page
+  const clearSessionAndRedirect = async () => {
+    // Clear localStorage
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('user')
+
+    // Sign out from NextAuth session and redirect to landing page
+    await signOut({ redirect: false })
+    router.push('/')
+  }
+
   const fetchDashboardData = async () => {
     if (!session?.accessToken) return
-    
+
     try {
       const response = await api.get('/patient-dashboard', {
         headers: { Authorization: `Bearer ${session.accessToken}` }
       })
       setDashboardData(response.data)
     } catch (error: any) {
+      const status = error.response?.status
+
+      // If patient profile not found (404) or access denied (403), clear session and redirect
+      if (status === 404 || status === 403) {
+        toast.error('Patient profile not found. Redirecting to home page...')
+        await clearSessionAndRedirect()
+        return
+      }
+
       toast.error(error.response?.data?.detail || 'Failed to load dashboard')
     } finally {
       setLoading(false)
@@ -69,7 +92,7 @@ export default function PatientDashboard() {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900">Dashboard Unavailable</h2>
           <p className="text-gray-600 mt-2">Unable to load your dashboard data</p>
-          <button 
+          <button
             onClick={fetchDashboardData}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
@@ -82,28 +105,13 @@ export default function PatientDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">My Health Dashboard</h1>
-              <p className="mt-2 text-gray-600">
-                Patient ID: {dashboardData.patient_profile.patient_id}
-              </p>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={fetchDashboardData}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                🔄 Refresh
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Header with Profile Dropdown */}
+      <Navbar
+        title="My Health Dashboard"
+        subtitle={`Patient ID: ${dashboardData.patient_profile.patient_id}`}
+        showRefresh={true}
+        onRefresh={fetchDashboardData}
+      />
 
       {/* Welcome Section */}
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -131,41 +139,37 @@ export default function PatientDashboard() {
           <nav className="flex space-x-8 border-b border-gray-200">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'overview'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'overview'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Overview
             </button>
             <button
               onClick={() => setActiveTab('documents')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'documents'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'documents'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Documents ({dashboardData.stats.total_documents})
             </button>
             <button
               onClick={() => setActiveTab('timeline')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'timeline'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'timeline'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Timeline
             </button>
             <button
               onClick={() => setActiveTab('profile')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'profile'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'profile'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Profile
             </button>
@@ -187,13 +191,12 @@ export default function PatientDashboard() {
                         {new Date(doc.upload_date).toLocaleDateString()}
                       </p>
                     </div>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      doc.status === DocumentStatus.PROCESSED
-                        ? 'bg-green-100 text-green-800'
-                        : doc.status === DocumentStatus.PROCESSING
+                    <span className={`px-2 py-1 text-xs rounded-full ${doc.status === DocumentStatus.PROCESSED
+                      ? 'bg-green-100 text-green-800'
+                      : doc.status === DocumentStatus.PROCESSING
                         ? 'bg-yellow-100 text-yellow-800'
                         : 'bg-blue-100 text-blue-800'
-                    }`}>
+                      }`}>
                       {doc.status}
                     </span>
                   </div>
@@ -220,7 +223,7 @@ export default function PatientDashboard() {
                     </div>
                   </div>
                 </button>
-                
+
                 <button
                   onClick={() => setActiveTab('timeline')}
                   className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50"
@@ -233,7 +236,7 @@ export default function PatientDashboard() {
                     </div>
                   </div>
                 </button>
-                
+
                 <button
                   onClick={() => setActiveTab('profile')}
                   className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50"
@@ -271,7 +274,7 @@ export default function PatientDashboard() {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
                 <p className="mt-1 text-sm text-gray-900">
-                  {dashboardData.patient_profile.date_of_birth 
+                  {dashboardData.patient_profile.date_of_birth
                     ? new Date(dashboardData.patient_profile.date_of_birth).toLocaleDateString()
                     : 'Not provided'
                   }

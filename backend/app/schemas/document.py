@@ -315,6 +315,11 @@ class DocumentAnalyticsRequest(BaseModel):
         if v not in ['day', 'week', 'month']:
             raise ValueError('Invalid group_by value')
         return v
+class BulkDocumentOperationRequest(BaseModel):
+    document_ids: List[int]
+    operation: str
+    parameters: Optional[Dict[str, Any]] = None
+
 class DocumentAssignmentRequest(BaseModel, SecurityValidatorMixin):
     document_ids: List[int]
     assignee_id: int

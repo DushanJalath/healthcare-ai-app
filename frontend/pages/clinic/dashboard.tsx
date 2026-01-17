@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import Navbar from '@/components/layout/Navbar'
 import DashboardStats from '@/components/clinic/DashboardStats'
 import RecentActivity from '@/components/clinic/RecentActivity'
 import SystemAlerts from '@/components/clinic/SystemAlerts'
@@ -12,6 +14,7 @@ import toast, { Toaster } from 'react-hot-toast'
 
 export default function ClinicDashboard() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [stats, setStats] = useState<ClinicDashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -35,7 +38,7 @@ export default function ClinicDashboard() {
   }
 
   const handleQuickAction = (action: string) => {
-    const actions = {
+    const actions: Record<string, string> = {
       create_patient: '/patients/create',
       upload_documents: '/documents/upload',
       view_reports: '/reports',
@@ -43,19 +46,19 @@ export default function ClinicDashboard() {
     }
     
     if (actions[action]) {
-      window.location.href = actions[action]
+      router.push(actions[action])
     }
   }
 
   const handleAlertAction = (action: string) => {
-    const alertActions = {
+    const alertActions: Record<string, string> = {
       view_failed_documents: '/documents?status=failed',
       manage_storage: '/clinic/storage',
       process_documents: '/documents?status=uploaded'
     }
     
     if (alertActions[action]) {
-      window.location.href = alertActions[action]
+      router.push(alertActions[action])
     }
   }
 
@@ -76,34 +79,13 @@ export default function ClinicDashboard() {
       </Head>
       
       <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="bg-white shadow">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-6">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Clinic Dashboard</h1>
-                <p className="mt-2 text-gray-600">
-                  Welcome back! Here's what's happening in your clinic.
-                </p>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={fetchDashboardData}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  🔄 Refresh
-                </button>
-                <Link
-                  href="/dashboard"
-                  className="text-blue-600 hover:text-blue-800"
-                >
-                  ← Back to Main Dashboard
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Header with Profile Dropdown */}
+        <Navbar 
+          title="Clinic Dashboard"
+          subtitle="Welcome back! Here's what's happening in your clinic."
+          showRefresh={true}
+          onRefresh={fetchDashboardData}
+        />
 
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           {stats && (

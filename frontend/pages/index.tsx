@@ -17,8 +17,14 @@ export default function Home() {
             <h1 className="text-5xl font-bold text-gray-900 mb-6">
               Healthcare AI Platform
             </h1>
-            <p className="text-xl text-gray-600 mb-8">
+            <p className="text-xl text-gray-600 mb-4">
               Advanced AI-powered medical document analysis for clinics and patients
+            </p>
+            <p className="text-gray-500 mb-8">
+              New here?{' '}
+              <Link href="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+                Create an account
+              </Link>
             </p>
             
             <div className="grid md:grid-cols-2 gap-6 mt-12">

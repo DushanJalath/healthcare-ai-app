@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 
 from ..database import get_db
@@ -9,10 +9,40 @@ from ..models.clinic import Clinic
 from ..models.patient import Patient, Gender
 from ..models.document import Document, DocumentType, DocumentStatus
 from ..models.user import User, UserRole
+from ..models.audit_log import AuditLog
 from ..schemas.clinic import (
     ClinicResponse, ClinicUpdate, ClinicDashboardStats, ClinicOverview
 )
 from ..utils.deps import get_current_active_user, require_clinic_access
+
+def get_user_clinic(current_user: User, db: Session) -> Optional[Clinic]:
+    """Get clinic for user (handles both clinic_admin and clinic_staff)."""
+    # For clinic_admin, find clinic by admin_user_id
+    if current_user.role == UserRole.CLINIC_ADMIN:
+        clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+        if clinic:
+            return clinic
+    
+    # For clinic_staff, find clinic through audit logs or documents
+    # (since there's no direct clinic_id in User model)
+    if current_user.role == UserRole.CLINIC_STAFF:
+        # Try to find clinic through audit logs created by this user
+        audit_log = db.query(AuditLog).filter(
+            AuditLog.user_id == current_user.id,
+            AuditLog.clinic_id.isnot(None)
+        ).first()
+        if audit_log:
+            clinic = db.query(Clinic).filter(Clinic.id == audit_log.clinic_id).first()
+            if clinic:
+                return clinic
+        
+        # Fallback: find any active clinic
+        # NOTE: This is a temporary solution. Ideally, clinic_staff should have clinic_id in User model
+        clinic = db.query(Clinic).filter(Clinic.is_active == True).first()
+        if clinic:
+            return clinic
+    
+    return None
 
 router = APIRouter(prefix="/clinic", tags=["clinic"])
 
@@ -23,7 +53,7 @@ async def get_clinic_profile(
 ):
     """Get current clinic profile."""
     
-    clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+    clinic = get_user_clinic(current_user, db)
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
     
@@ -37,7 +67,14 @@ async def update_clinic_profile(
 ):
     """Update clinic profile."""
     
-    clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+    # Only clinic_admin can update clinic profile
+    if current_user.role != UserRole.CLINIC_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only clinic administrators can update clinic profile"
+        )
+    
+    clinic = get_user_clinic(current_user, db)
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
     
@@ -58,7 +95,7 @@ async def get_clinic_dashboard_stats(
 ):
     """Get comprehensive clinic dashboard statistics."""
     
-    clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+    clinic = get_user_clinic(current_user, db)
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
     

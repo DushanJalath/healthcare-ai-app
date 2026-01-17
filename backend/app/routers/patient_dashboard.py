@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, func
 from typing import List, Optional
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 
 from ..database import get_db
 from ..models.patient import Patient
@@ -144,7 +145,7 @@ async def get_patient_documents(
         patient_name=patient.patient_id,
         description="Viewed patient documents list",
         request=request,
-        metadata={"page": page, "per_page": per_page, "status": status, "type": document_type}
+        extra_metadata={"page": page, "per_page": per_page, "status": status, "type": document_type}
     )
     
     # Build query
@@ -184,7 +185,7 @@ async def get_patient_timeline(
         patient_name=patient.patient_id,
         description="Viewed patient timeline",
         request=request,
-        metadata={"days": days}
+        extra_metadata={"days": days}
     )
     
     timeline_events = _build_patient_timeline(patient.id, db, days)

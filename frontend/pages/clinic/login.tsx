@@ -1,17 +1,17 @@
 import { GetServerSideProps } from 'next'
 import { getSession } from 'next-auth/react'
 import Head from 'next/head'
-import RegisterForm from '@/components/auth/RegisterForm'
+import LoginForm from '@/components/auth/LoginForm'
 import { Toaster } from 'react-hot-toast'
 
-export default function RegisterPage() {
+export default function ClinicLoginPage() {
   return (
     <>
       <Head>
-        <title>Register - Healthcare AI</title>
-        <meta name="description" content="Create account on Healthcare AI platform" />
+        <title>Clinic Login - Healthcare AI</title>
+        <meta name="description" content="Login to Healthcare AI platform for clinics" />
       </Head>
-      <RegisterForm />
+      <LoginForm userType="clinic" />
       <Toaster position="top-right" />
     </>
   )
@@ -23,7 +23,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   if (session) {
     return {
       redirect: {
-        destination: '/',
+        destination: '/clinic/dashboard',
         permanent: false,
       },
     }

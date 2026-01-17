@@ -38,7 +38,7 @@ class PatientBase(BaseModel, SecurityValidatorMixin):
 
 class PatientCreate(PatientBase):
     user_id: Optional[int] = None
-    clinic_id: int
+    clinic_id: Optional[int] = None  # Will be set from current user's clinic
 
 class PatientUpdate(BaseModel, SecurityValidatorMixin):
     date_of_birth: Optional[date] = None
@@ -66,7 +66,7 @@ class PatientUpdate(BaseModel, SecurityValidatorMixin):
 class PatientResponse(PatientBase):
     id: int
     user_id: Optional[int]
-    clinic_id: int
+    clinic_id: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime]
     

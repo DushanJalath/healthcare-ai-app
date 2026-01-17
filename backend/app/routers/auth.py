@@ -1,10 +1,12 @@
 from datetime import timedelta
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.user import User,UserRole
 from ..models.clinic import Clinic
+from ..models.patient import Patient
 from ..schemas.auth import LoginRequest, RegisterRequest
 from ..schemas.user import Token, UserResponse
 from ..utils.auth import verify_password, get_password_hash, create_access_token
@@ -54,6 +56,17 @@ async def register(
             admin_user_id=db_user.id
         )
         db.add(db_clinic)
+        db.commit()
+    
+    # Create patient profile if user is patient
+    if user_data.role == UserRole.PATIENT:
+        # Generate a unique patient_id
+        patient_id = f"PAT-{uuid.uuid4().hex[:8].upper()}"
+        db_patient = Patient(
+            user_id=db_user.id,
+            patient_id=patient_id
+        )
+        db.add(db_patient)
         db.commit()
     
     return UserResponse.from_orm(db_user)
@@ -129,3 +142,31 @@ async def get_current_user_profile(
 ):
     """Get current user profile."""
     return UserResponse.from_orm(current_user)
+
+@router.post("/fix-patient-profile")
+async def fix_patient_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create missing patient profile for patient users."""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This endpoint is only for patient users"
+        )
+    
+    # Check if patient profile already exists
+    existing_patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if existing_patient:
+        return {"message": "Patient profile already exists", "patient_id": existing_patient.patient_id}
+    
+    # Create patient profile
+    patient_id = f"PAT-{uuid.uuid4().hex[:8].upper()}"
+    db_patient = Patient(
+        user_id=current_user.id,
+        patient_id=patient_id
+    )
+    db.add(db_patient)
+    db.commit()
+    
+    return {"message": "Patient profile created", "patient_id": patient_id}

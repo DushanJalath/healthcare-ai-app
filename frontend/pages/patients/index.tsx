@@ -6,7 +6,8 @@ import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import PatientList from '@/components/patients/PatientList'
 import PatientForm from '@/components/patients/PatientForm'
-import { Patient, UserRole } from '@/types'
+import PatientStatsOverview from '@/components/patients/PatientStatsOverview'
+import { Patient, UserRole, PatientStatsResponse } from '@/types'
 import api from '@/utils/api'
 import toast, { Toaster } from 'react-hot-toast'
 
@@ -18,13 +19,18 @@ export default function PatientsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [patientStats, setPatientStats] = useState<PatientStatsResponse | null>(null)
+  const [showStats, setShowStats] = useState(false)
 
   const isClinicUser = session?.user?.role === UserRole.CLINIC_ADMIN || 
                      session?.user?.role === UserRole.CLINIC_STAFF
 
   useEffect(() => {
     fetchPatients()
-  }, [session])
+    if (isClinicUser) {
+      fetchPatientStats()
+    }
+  }, [session, searchQuery])
 
   const fetchPatients = async () => {
     if (!session?.accessToken) return
@@ -98,11 +104,22 @@ export default function PatientsPage() {
     router.push(`/patients/${patientId}/documents`)
   }
 
-  const filteredPatients = patients.filter(patient =>
-    patient.patient_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (patient.user_first_name && patient.user_first_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (patient.user_last_name && patient.user_last_name.toLowerCase().includes(searchQuery.toLowerCase()))
-  )
+  const fetchPatientStats = async () => {
+    if (!session?.accessToken || !isClinicUser) return
+    
+    try {
+      const response = await api.get('/patients/stats', {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      })
+      setPatientStats(response.data)
+    } catch (error: any) {
+      // Silently fail - stats are optional
+      console.error('Failed to load patient stats:', error)
+    }
+  }
+
+  // Use patients directly since backend handles filtering
+  const filteredPatients = patients
 
   return (
     <ProtectedRoute>
@@ -124,12 +141,20 @@ export default function PatientsPage() {
               
               <div className="flex items-center space-x-4">
                 {isClinicUser && (
-                  <button
-                    onClick={() => setShowCreateForm(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Add Patient
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowStats(!showStats)}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                    >
+                      {showStats ? 'Hide Stats' : 'Show Stats'}
+                    </button>
+                    <button
+                      onClick={() => setShowCreateForm(true)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Add Patient
+                    </button>
+                  </>
                 )}
                 <Link
                   href="/dashboard"
@@ -143,6 +168,13 @@ export default function PatientsPage() {
         </div>
 
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          {/* Patient Stats */}
+          {showStats && isClinicUser && patientStats && (
+            <div className="mb-8">
+              <PatientStatsOverview stats={patientStats} />
+            </div>
+          )}
+
           {/* Search Bar */}
           {isClinicUser && (
             <div className="mb-6">

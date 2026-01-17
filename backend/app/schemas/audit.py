@@ -19,7 +19,7 @@ class AuditLogResponse(AuditLogBase):
     clinic_id: Optional[int]
     patient_id: Optional[int]
     changes: Optional[Dict[str, Any]]
-    metadata: Optional[Dict[str, Any]]
+    extra_metadata: Optional[Dict[str, Any]]
     ip_address: Optional[str]
     user_agent: Optional[str]
     request_path: Optional[str]

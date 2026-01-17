@@ -1,16 +1,21 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { signIn } from 'next-auth/react'
+import { signIn, getSession } from 'next-auth/react'
 import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
+import { UserRole } from '@/types'
 
 interface LoginFormData {
   email: string
   password: string
 }
 
-export default function LoginForm() {
+interface LoginFormProps {
+  userType?: 'clinic' | 'patient'
+}
+
+export default function LoginForm({ userType }: LoginFormProps = {}) {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   
@@ -19,6 +24,19 @@ export default function LoginForm() {
     handleSubmit,
     formState: { errors }
   } = useForm<LoginFormData>()
+
+  const getRedirectPathForRole = (role: string) => {
+    if (role === UserRole.PATIENT) return '/patients/dashboard'
+    if (role === UserRole.CLINIC_ADMIN || role === UserRole.CLINIC_STAFF) return '/clinic/dashboard'
+    if (role === UserRole.ADMIN) return '/dashboard'
+    return '/'
+  }
+
+  const getTitle = () => {
+    if (userType === 'clinic') return 'Clinic Sign In'
+    if (userType === 'patient') return 'Patient Sign In'
+    return 'Sign in to your account'
+  }
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
@@ -34,7 +52,21 @@ export default function LoginForm() {
         toast.error('Invalid email or password')
       } else {
         toast.success('Login successful!')
-        router.push('/dashboard')
+        
+        // Get the session to determine user role
+        const session = await getSession()
+        if (session?.user?.role) {
+          router.push(getRedirectPathForRole(session.user.role))
+        } else {
+          // Fallback based on userType prop or default
+          if (userType === 'clinic') {
+            router.push('/clinic/dashboard')
+          } else if (userType === 'patient') {
+            router.push('/patients/dashboard')
+          } else {
+            router.push('/dashboard')
+          }
+        }
       }
     } catch (error) {
       toast.error('Login failed. Please try again.')
@@ -48,7 +80,7 @@ export default function LoginForm() {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
+            {getTitle()}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{' '}

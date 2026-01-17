@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Enum, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
@@ -15,7 +15,7 @@ class AuditAction(enum.Enum):
     UPLOAD = "upload"
     ASSIGN = "assign"
     PROCESS = "process"
-    EXPORT = "export"
+    EXPORT = "export"   
 
 class AuditEntityType(enum.Enum):
     USER = "user"
@@ -48,7 +48,7 @@ class AuditLog(Base):
     # Details
     description = Column(Text, nullable=False)
     changes = Column(JSON, nullable=True)  # Before/after values for updates
-    metadata = Column(JSON, nullable=True)  # Additional context
+    extra_metadata = Column(JSON, nullable=True)  # Additional context
     
     # Request information
     ip_address = Column(String, nullable=True)
@@ -56,7 +56,7 @@ class AuditLog(Base):
     request_path = Column(String, nullable=True)
     
     # Status
-    success = Column(String, default=True)  # True for success, False for failures
+    success = Column(Boolean, default=True)  # True for success, False for failures
     error_message = Column(Text, nullable=True)
     
     # Timestamp

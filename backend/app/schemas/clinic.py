@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from ..utils.validators import SecurityValidatorMixin, SecureTextValidator
 
@@ -52,10 +52,10 @@ class ClinicDashboardStats(BaseModel):
     patients_this_month: int
     storage_used: int
     processing_queue: int
-    recent_activity: List[Dict]
+    recent_activity: List[Dict[str, Any]]
     popular_document_types: Dict[str, int]
-    patient_demographics: Dict[str, any]
-    system_alerts: List[Dict]
+    patient_demographics: Dict[str, Any]
+    system_alerts: List[Dict[str, Any]]
 
 class ClinicOverview(BaseModel):
     clinic_info: ClinicResponse

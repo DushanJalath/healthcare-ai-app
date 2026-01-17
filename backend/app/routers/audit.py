@@ -179,7 +179,7 @@ async def create_test_audit_log(
         user=current_user,
         description="Test audit log created via API",
         request=request,
-        metadata={"test": True, "endpoint": "/audit/test"}
+        extra_metadata={"test": True, "endpoint": "/audit/test"}
     )
     
     return {"message": "Test audit log created", "audit_log_id": audit_log.id}

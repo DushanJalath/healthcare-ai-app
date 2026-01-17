@@ -8,6 +8,8 @@ declare module 'next-auth' {
       role: string
       isActive: boolean
       isVerified: boolean
+      firstName?: string
+      lastName?: string
     } & DefaultSession['user']
   }
 
@@ -16,6 +18,8 @@ declare module 'next-auth' {
     role: string
     isActive: boolean
     isVerified: boolean
+    firstName?: string
+    lastName?: string
   }
 }
 
@@ -25,5 +29,7 @@ declare module 'next-auth/jwt' {
     role?: string
     isActive?: boolean
     isVerified?: boolean
+    firstName?: string
+    lastName?: string
   }
 }

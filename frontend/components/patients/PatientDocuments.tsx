@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/router'
 import { Document, DocumentType, DocumentStatus } from '@/types'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
 
 export default function PatientDocuments() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({
@@ -17,6 +19,14 @@ export default function PatientDocuments() {
   useEffect(() => {
     fetchDocuments()
   }, [session, filters, page])
+
+  // Helper function to clear session and redirect to landing page
+  const clearSessionAndRedirect = async () => {
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('user')
+    await signOut({ redirect: false })
+    router.push('/')
+  }
 
   const fetchDocuments = async () => {
     if (!session?.accessToken) return
@@ -37,6 +47,15 @@ export default function PatientDocuments() {
       
       setDocuments(response.data)
     } catch (error: any) {
+      const status = error.response?.status
+      
+      // If patient profile not found (404) or access denied (403), clear session and redirect
+      if (status === 404 || status === 403) {
+        toast.error('Patient profile not found. Redirecting to home page...')
+        await clearSessionAndRedirect()
+        return
+      }
+      
       toast.error(error.response?.data?.detail || 'Failed to load documents')
     } finally {
       setLoading(false)

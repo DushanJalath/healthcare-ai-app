@@ -4,14 +4,14 @@ import Head from 'next/head'
 import LoginForm from '@/components/auth/LoginForm'
 import { Toaster } from 'react-hot-toast'
 
-export default function LoginPage() {
+export default function PatientLoginPage() {
   return (
     <>
       <Head>
-        <title>Login - Healthcare AI</title>
-        <meta name="description" content="Login to Healthcare AI platform" />
+        <title>Patient Login - Healthcare AI</title>
+        <meta name="description" content="Login to Healthcare AI platform for patients" />
       </Head>
-      <LoginForm />
+      <LoginForm userType="patient" />
       <Toaster position="top-right" />
     </>
   )
@@ -23,7 +23,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   if (session) {
     return {
       redirect: {
-        destination: '/dashboard',
+        destination: '/patients/dashboard',
         permanent: false,
       },
     }

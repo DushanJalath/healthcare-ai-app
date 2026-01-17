@@ -45,8 +45,8 @@ export default function RegisterForm() {
         clinic_license: data.clinic_license
       })
 
-      toast.success('Account created successfully!')
-      router.push('/login')
+      toast.success('Account created successfully! Please login.')
+      router.push('/')
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Registration failed'
       toast.error(message)
@@ -63,9 +63,9 @@ export default function RegisterForm() {
             Create your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
-            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
-              sign in to existing account
+            Already have an account?{' '}
+            <Link href="/" className="font-medium text-blue-600 hover:text-blue-500">
+              Go to login
             </Link>
           </p>
         </div>

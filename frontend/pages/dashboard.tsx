@@ -1,13 +1,47 @@
 import { useSession, signOut } from 'next-auth/react'
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
 import Head from 'next/head'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { UserRole } from '@/types'
 
 export default function DashboardPage() {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
+  const router = useRouter()
+
+  // Redirect based on user role
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.role) {
+      const role = session.user.role
+      
+      if (role === UserRole.PATIENT) {
+        router.replace('/patients/dashboard')
+      } else if (role === UserRole.CLINIC_ADMIN || role === UserRole.CLINIC_STAFF) {
+        router.replace('/clinic/dashboard')
+      } else if (role === UserRole.ADMIN) {
+        // Admin stays on main dashboard or goes to admin dashboard
+        // For now, stay on this page
+      }
+    }
+  }, [status, session, router])
 
   const handleSignOut = () => {
     signOut({ callbackUrl: '/' })
+  }
+
+  // Show loading while redirecting
+  if (status === 'loading' || (status === 'authenticated' && 
+      (session?.user?.role === UserRole.PATIENT || 
+       session?.user?.role === UserRole.CLINIC_ADMIN || 
+       session?.user?.role === UserRole.CLINIC_STAFF))) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Redirecting to your dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -55,7 +89,7 @@ export default function DashboardPage() {
                   Your role: <span className="font-semibold">{session?.user?.role}</span>
                 </p>
                 <p className="text-gray-500">
-                  Dashboard features coming in Day 3-4 implementation
+                  Admin Dashboard - Manage your healthcare platform
                 </p>
               </div>
             </div>
