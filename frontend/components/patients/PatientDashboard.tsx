@@ -129,8 +129,6 @@ export default function PatientDashboard() {
       <Navbar
         title="My Health Dashboard"
         subtitle={`Patient ID: ${dashboardData.patient_profile.patient_id}`}
-        showRefresh={true}
-        onRefresh={fetchDashboardData}
         clinics={clinics}
         selectedClinicId={selectedClinicId}
         onClinicChange={setSelectedClinicId}

@@ -31,7 +31,7 @@ export default function Home() {
                 <span className="bg-gradient-to-r from-medical-600 to-medical-700 bg-clip-text text-transparent">
                   MediKeep
                 </span>
-              </h1>
+            </h1>
               <p className="text-lg text-gray-600 font-medium">
                 Intelligent Chronic Care Platform
               </p>

@@ -14,6 +14,7 @@ from ..models.audit_log import AuditLog
 from ..schemas.clinic import (
     ClinicResponse, ClinicUpdate, ClinicDashboardStats, ClinicOverview
 )
+from ..schemas.user import UserResponse
 from ..utils.deps import get_current_active_user, require_clinic_access
 
 def get_user_clinic(current_user: User, db: Session) -> Optional[Clinic]:
@@ -178,6 +179,25 @@ async def get_clinic_overview(
         stats=stats,
         quick_actions=quick_actions
     )
+
+@router.get("/users", response_model=List[UserResponse])
+async def get_clinic_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_access)
+):
+    """Get all users associated with the current user's clinic."""
+    
+    clinic = get_user_clinic(current_user, db)
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    
+    # Get all users with this clinic_id (clinic_admin and clinic_staff)
+    users = db.query(User).filter(
+        User.clinic_id == clinic.id,
+        User.role.in_([UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF])
+    ).order_by(User.created_at.desc()).all()
+    
+    return [UserResponse.from_orm(user) for user in users]
 
 def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[Dict[str, Any]]:
     """Get recent clinic activity."""

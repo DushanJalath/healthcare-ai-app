@@ -52,8 +52,11 @@ export default function ProfilePage() {
   const passwordValidation = validatePassword(newPassword)
 
   useEffect(() => {
-    fetchProfile()
-  }, [session])
+    if (session?.accessToken) {
+      fetchProfile()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken])
 
   const fetchProfile = async () => {
     if (!session?.accessToken) return

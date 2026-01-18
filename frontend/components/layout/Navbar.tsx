@@ -12,18 +12,14 @@ interface Clinic {
 interface NavbarProps {
   title?: string
   subtitle?: string
-  showRefresh?: boolean
-  onRefresh?: () => void
   clinics?: Clinic[]
   selectedClinicId?: number | null
   onClinicChange?: (clinicId: number | null) => void
 }
 
-export default function Navbar({ 
-  title = 'Dashboard', 
+export default function Navbar({
+  title = 'Dashboard',
   subtitle,
-  showRefresh = false,
-  onRefresh,
   clinics = [],
   selectedClinicId = null,
   onClinicChange
@@ -95,8 +91,8 @@ export default function Navbar({
               <Image
                 src="/medikeep.png"
                 alt="MediKeep Logo"
-                width={40}
-                height={40}
+                width={84}
+                height={84}
                 className="object-contain"
               />
             </Link>
@@ -109,31 +105,20 @@ export default function Navbar({
           </div>
 
           {/* Center - Clinic Selector */}
-                {clinics.length > 0 && onClinicChange && (
+          {clinics.length > 0 && onClinicChange && (
             <div className="flex items-center space-x-2 mx-4">
               <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider mr-2">
                 My Clinics:
               </span>
               <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => onClinicChange(null)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    selectedClinicId === null
-                      ? 'bg-medical-50 text-medical-700 border border-medical-200'
-                      : 'text-gray-700 hover:bg-gray-50 border border-transparent'
-                  }`}
-                >
-                  All Clinics
-                </button>
                 {clinics.map((clinic) => (
                   <button
                     key={clinic.id}
                     onClick={() => onClinicChange(clinic.id)}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      selectedClinicId === clinic.id
-                        ? 'bg-medical-50 text-medical-700 border border-medical-200'
-                        : 'text-gray-700 hover:bg-gray-50 border border-transparent'
-                    }`}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${selectedClinicId === clinic.id
+                      ? 'bg-medical-50 text-medical-700 border border-medical-200'
+                      : 'text-gray-700 hover:bg-gray-50 border border-transparent'
+                      }`}
                   >
                     {clinic.name}
                   </button>
@@ -141,18 +126,9 @@ export default function Navbar({
               </div>
             </div>
           )}
-          
+
           {/* Right side - Actions & Profile */}
           <div className="flex items-center space-x-4">
-            {showRefresh && onRefresh && (
-              <button
-                onClick={onRefresh}
-                className="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                title="Refresh"
-              >
-                🔄
-              </button>
-            )}
 
             {/* Profile Dropdown */}
             <div className="relative" ref={dropdownRef}>
@@ -164,7 +140,7 @@ export default function Navbar({
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-medical-500 to-tech-500 flex items-center justify-center text-white font-semibold text-sm">
                   {getUserInitials()}
                 </div>
-                
+
                 {/* Name & Role */}
                 <div className="hidden md:block text-left">
                   <p className="text-sm font-medium text-gray-900">
@@ -174,12 +150,12 @@ export default function Navbar({
                     {formatRole(session?.user?.role)}
                   </p>
                 </div>
-                
+
                 {/* Dropdown Arrow */}
-                <svg 
+                <svg
                   className={`w-4 h-4 text-gray-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}
-                  fill="none" 
-                  stroke="currentColor" 
+                  fill="none"
+                  stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />

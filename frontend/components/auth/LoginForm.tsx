@@ -19,7 +19,7 @@ interface LoginFormProps {
 export default function LoginForm({ userType }: LoginFormProps = {}) {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-  
+
   const {
     register,
     handleSubmit,
@@ -41,7 +41,7 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
-    
+
     try {
       const result = await signIn('credentials', {
         email: data.email,
@@ -53,7 +53,7 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
         toast.error('Invalid email or password')
       } else {
         toast.success('Login successful!')
-        
+
         // Get the session to determine user role
         const session = await getSession()
         if (session?.user?.role) {
@@ -84,8 +84,8 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
             <Image
               src="/medikeep.png"
               alt="MediKeep Logo"
-              width={80}
-              height={80}
+              width={200}
+              height={200}
               className="object-contain"
               priority
             />
@@ -100,7 +100,7 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
             </Link>
           </p>
         </div>
-        
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
@@ -124,7 +124,7 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
               )}
             </div>
-            
+
             <div>
               <label htmlFor="password" className="sr-only">
                 Password

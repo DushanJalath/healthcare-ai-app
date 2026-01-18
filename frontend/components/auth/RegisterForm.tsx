@@ -64,8 +64,8 @@ export default function RegisterForm() {
             <Image
               src="/medikeep.png"
               alt="MediKeep Logo"
-              width={80}
-              height={80}
+              width={120}
+              height={120}
               className="object-contain"
               priority
             />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
@@ -18,11 +18,7 @@ export default function ClinicDashboard() {
   const [stats, setStats] = useState<ClinicDashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchDashboardData()
-  }, [session])
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     if (!session?.accessToken) return
 
     try {
@@ -35,7 +31,13 @@ export default function ClinicDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [session?.accessToken])
+
+  useEffect(() => {
+    if (session?.accessToken) {
+      fetchDashboardData()
+    }
+  }, [session?.accessToken, fetchDashboardData])
 
   const handleQuickAction = (action: string) => {
     const actions: Record<string, string> = {
@@ -83,8 +85,6 @@ export default function ClinicDashboard() {
         <Navbar
           title="Clinic Dashboard"
           subtitle="Welcome back! Here's what's happening in your clinic."
-          showRefresh={true}
-          onRefresh={fetchDashboardData}
         />
 
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -131,6 +131,20 @@ export default function ClinicDashboard() {
                     <div className="text-2xl mb-2">📄</div>
                     <div className="font-medium">Manage Documents</div>
                     <div className="text-sm text-gray-600">View and organize files</div>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Additional Actions */}
+              <div className="mb-8">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <Link
+                    href="/clinic/users"
+                    className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left block"
+                  >
+                    <div className="text-2xl mb-2">🏥</div>
+                    <div className="font-medium">All Patients</div>
+                    <div className="text-sm text-gray-600">View all clinic patients</div>
                   </Link>
                 </div>
               </div>

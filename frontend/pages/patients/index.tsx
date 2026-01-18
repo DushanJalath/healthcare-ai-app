@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
@@ -21,25 +21,19 @@ export default function PatientsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [patientStats, setPatientStats] = useState<PatientStatsResponse | null>(null)
   const [showStats, setShowStats] = useState(false)
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const isClinicUser = session?.user?.role === UserRole.CLINIC_ADMIN || 
                      session?.user?.role === UserRole.CLINIC_STAFF
 
-  useEffect(() => {
-    fetchPatients()
-    if (isClinicUser) {
-      fetchPatientStats()
-    }
-  }, [session, searchQuery])
-
-  const fetchPatients = async () => {
+  const fetchPatients = useCallback(async (search: string = '') => {
     if (!session?.accessToken) return
     
     try {
       setLoading(true)
       const params = new URLSearchParams({ page: '1', per_page: '100' })
-      if (searchQuery) {
-        params.append('search', searchQuery)
+      if (search) {
+        params.append('search', search)
       }
 
       const response = await api.get(`/patients?${params}`, {
@@ -51,7 +45,53 @@ export default function PatientsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [session?.accessToken])
+
+  const fetchPatientStats = useCallback(async () => {
+    if (!session?.accessToken || !isClinicUser) return
+    
+    try {
+      const response = await api.get('/patients/stats', {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      })
+      setPatientStats(response.data)
+    } catch (error: any) {
+      // Silently fail - stats are optional
+      console.error('Failed to load patient stats:', error)
+    }
+  }, [session?.accessToken, isClinicUser])
+
+  // Initial load - only run once when session is available
+  useEffect(() => {
+    if (session?.accessToken) {
+      fetchPatients('')
+      const userRole = session?.user?.role
+      if (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.CLINIC_STAFF) {
+        fetchPatientStats()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken]) // Only depend on token to avoid re-fetches
+
+  // Debounced search
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      if (session?.accessToken) {
+        fetchPatients(searchQuery)
+      }
+    }, 500)
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [searchQuery, session?.accessToken, fetchPatients])
+
 
   const handleCreatePatient = async (patientData: any) => {
     try {
@@ -104,19 +144,6 @@ export default function PatientsPage() {
     router.push(`/patients/${patientId}/documents`)
   }
 
-  const fetchPatientStats = async () => {
-    if (!session?.accessToken || !isClinicUser) return
-    
-    try {
-      const response = await api.get('/patients/stats', {
-        headers: { Authorization: `Bearer ${session.accessToken}` }
-      })
-      setPatientStats(response.data)
-    } catch (error: any) {
-      // Silently fail - stats are optional
-      console.error('Failed to load patient stats:', error)
-    }
-  }
 
   // Use patients directly since backend handles filtering
   const filteredPatients = patients
