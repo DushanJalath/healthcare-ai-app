@@ -61,12 +61,12 @@ class DocumentResponse(DocumentBase):
     file_path: str
     mime_type: str
     file_size: int
-    file_hash: Optional[str]
+    file_hash: Optional[str] = None
     status: DocumentStatus
     upload_date: datetime
-    processed_date: Optional[datetime]
+    processed_date: Optional[datetime] = None
     created_at: datetime
-    updated_at: Optional[datetime]
+    updated_at: Optional[datetime] = None
     
     # Additional computed fields
     patient_name: Optional[str] = None

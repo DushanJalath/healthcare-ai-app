@@ -8,8 +8,8 @@ export default function RegisterPage() {
   return (
     <>
       <Head>
-        <title>Register - Healthcare AI</title>
-        <meta name="description" content="Create account on Healthcare AI platform" />
+        <title>Register - MediKeep</title>
+        <meta name="description" content="Create account on MediKeep platform" />
       </Head>
       <RegisterForm />
       <Toaster position="top-right" />

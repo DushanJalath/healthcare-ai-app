@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from ..database import get_db
 from ..models.clinic import Clinic
 from ..models.patient import Patient, Gender
+from ..models.patient_clinic import PatientClinic
 from ..models.document import Document, DocumentType, DocumentStatus
 from ..models.user import User, UserRole
 from ..models.audit_log import AuditLog
@@ -17,28 +18,15 @@ from ..utils.deps import get_current_active_user, require_clinic_access
 
 def get_user_clinic(current_user: User, db: Session) -> Optional[Clinic]:
     """Get clinic for user (handles both clinic_admin and clinic_staff)."""
-    # For clinic_admin, find clinic by admin_user_id
-    if current_user.role == UserRole.CLINIC_ADMIN:
-        clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+    # Both clinic_admin and clinic_staff now have clinic_id in User model
+    if current_user.clinic_id:
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         if clinic:
             return clinic
     
-    # For clinic_staff, find clinic through audit logs or documents
-    # (since there's no direct clinic_id in User model)
-    if current_user.role == UserRole.CLINIC_STAFF:
-        # Try to find clinic through audit logs created by this user
-        audit_log = db.query(AuditLog).filter(
-            AuditLog.user_id == current_user.id,
-            AuditLog.clinic_id.isnot(None)
-        ).first()
-        if audit_log:
-            clinic = db.query(Clinic).filter(Clinic.id == audit_log.clinic_id).first()
-            if clinic:
-                return clinic
-        
-        # Fallback: find any active clinic
-        # NOTE: This is a temporary solution. Ideally, clinic_staff should have clinic_id in User model
-        clinic = db.query(Clinic).filter(Clinic.is_active == True).first()
+    # Fallback for clinic_admin: find clinic by admin_user_id (for backward compatibility)
+    if current_user.role == UserRole.CLINIC_ADMIN:
+        clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
         if clinic:
             return clinic
     
@@ -104,15 +92,19 @@ async def get_clinic_dashboard_stats(
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     week_start = now - timedelta(days=7)
     
-    # Basic counts
-    total_patients = db.query(Patient).filter(Patient.clinic_id == clinic.id).count()
+    # Basic counts - use PatientClinic for accurate multi-clinic support
+    total_patients = db.query(Patient).join(PatientClinic).filter(
+        PatientClinic.clinic_id == clinic.id,
+        PatientClinic.is_active == True
+    ).distinct().count()
     total_documents = db.query(Document).filter(Document.clinic_id == clinic.id).count()
     
-    # This month stats
-    patients_this_month = db.query(Patient).filter(
-        Patient.clinic_id == clinic.id,
+    # This month stats - use PatientClinic
+    patients_this_month = db.query(Patient).join(PatientClinic).filter(
+        PatientClinic.clinic_id == clinic.id,
+        PatientClinic.is_active == True,
         Patient.created_at >= month_start
-    ).count()
+    ).distinct().count()
     
     documents_this_month = db.query(Document).filter(
         Document.clinic_id == clinic.id,
@@ -192,10 +184,11 @@ def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[D
     
     activities = []
     
-    # Recent patient registrations
-    recent_patients = db.query(Patient).filter(
-        Patient.clinic_id == clinic_id
-    ).order_by(Patient.created_at.desc()).limit(5).all()
+    # Recent patient registrations - use PatientClinic
+    recent_patients = db.query(Patient).join(PatientClinic).filter(
+        PatientClinic.clinic_id == clinic_id,
+        PatientClinic.is_active == True
+    ).order_by(Patient.created_at.desc()).distinct().limit(5).all()
     
     for patient in recent_patients:
         activities.append({
@@ -227,9 +220,10 @@ def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[D
 def _get_patient_demographics(clinic_id: int, db: Session) -> Dict[str, Any]:
     """Get patient demographic breakdown."""
     
-    # Gender distribution
-    gender_stats = db.query(Patient.gender, func.count(Patient.id)).filter(
-        Patient.clinic_id == clinic_id
+    # Gender distribution - use PatientClinic
+    gender_stats = db.query(Patient.gender, func.count(Patient.id)).join(PatientClinic).filter(
+        PatientClinic.clinic_id == clinic_id,
+        PatientClinic.is_active == True
     ).group_by(Patient.gender).all()
     
     gender_distribution = {
@@ -242,10 +236,11 @@ def _get_patient_demographics(clinic_id: int, db: Session) -> Dict[str, Any]:
     today = date.today()
     age_groups = {'0-18': 0, '19-35': 0, '36-55': 0, '56-70': 0, '71+': 0}
     
-    patients_with_dob = db.query(Patient).filter(
-        Patient.clinic_id == clinic_id,
+    patients_with_dob = db.query(Patient).join(PatientClinic).filter(
+        PatientClinic.clinic_id == clinic_id,
+        PatientClinic.is_active == True,
         Patient.date_of_birth.isnot(None)
-    ).all()
+    ).distinct().all()
     
     for patient in patients_with_dob:
         age = today.year - patient.date_of_birth.year

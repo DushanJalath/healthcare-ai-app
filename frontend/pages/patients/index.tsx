@@ -124,7 +124,7 @@ export default function PatientsPage() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>Patients - Healthcare AI</title>
+        <title>Patients - MediKeep</title>
       </Head>
       
       <div className="min-h-screen bg-gray-50">

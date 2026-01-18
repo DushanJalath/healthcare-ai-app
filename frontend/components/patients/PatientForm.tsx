@@ -21,6 +21,9 @@ interface PatientFormData {
   medical_history: string
   allergies: string
   current_medications: string
+  email?: string
+  first_name?: string
+  last_name?: string
 }
 
 export default function PatientForm({ patient, onSubmit, onCancel, loading = false }: PatientFormProps) {
@@ -40,7 +43,10 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
       emergency_contact_phone: patient.emergency_contact_phone || '',
       medical_history: patient.medical_history || '',
       allergies: patient.allergies || '',
-      current_medications: patient.current_medications || ''
+      current_medications: patient.current_medications || '',
+      email: (patient as any).user_email || '',
+      first_name: (patient as any).user_first_name || '',
+      last_name: (patient as any).user_last_name || ''
     } : {
       patient_id: '',
       date_of_birth: '',
@@ -51,7 +57,10 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
       emergency_contact_phone: '',
       medical_history: '',
       allergies: '',
-      current_medications: ''
+      current_medications: '',
+      email: '',
+      first_name: '',
+      last_name: ''
     }
   })
 
@@ -68,13 +77,110 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
       emergency_contact_phone: data.emergency_contact_phone || null,
       medical_history: data.medical_history || null,
       allergies: data.allergies || null,
-      current_medications: data.current_medications || null
+      current_medications: data.current_medications || null,
+      // Only include email/name if creating new patient (not updating)
+      ...(patient ? {} : {
+        email: data.email || null,
+        first_name: data.first_name || null,
+        last_name: data.last_name || null
+      })
     }
     onSubmit(submitData)
   }
 
+  const isNewPatient = !patient
+
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+      {/* Account Information - Only for new patients */}
+      {isNewPatient && (
+        <div className="bg-blue-50 p-6 rounded-lg shadow border border-blue-200">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information (Optional)</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Provide patient email and name to automatically create a patient account. The patient will receive login credentials via email.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                First Name
+              </label>
+              <input
+                {...register('first_name', {
+                  validate: (value) => {
+                    const email = watch('email')
+                    if (email && !value) {
+                      return 'First name is required when email is provided'
+                    }
+                    return true
+                  }
+                })}
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Patient first name"
+              />
+              {errors.first_name && (
+                <p className="mt-1 text-sm text-red-600">{errors.first_name.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Last Name
+              </label>
+              <input
+                {...register('last_name', {
+                  validate: (value) => {
+                    const email = watch('email')
+                    if (email && !value) {
+                      return 'Last name is required when email is provided'
+                    }
+                    return true
+                  }
+                })}
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Patient last name"
+              />
+              {errors.last_name && (
+                <p className="mt-1 text-sm text-red-600">{errors.last_name.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
+              </label>
+              <input
+                {...register('email', {
+                  pattern: {
+                    value: /^\S+@\S+$/i,
+                    message: 'Invalid email address'
+                  },
+                  validate: (value) => {
+                    const firstName = watch('first_name')
+                    const lastName = watch('last_name')
+                    if (value && (!firstName || !lastName)) {
+                      return 'First name and last name are required when email is provided'
+                    }
+                    return true
+                  }
+                })}
+                type="email"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="patient@example.com"
+              />
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Patient will receive login credentials via email
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Basic Information */}
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>

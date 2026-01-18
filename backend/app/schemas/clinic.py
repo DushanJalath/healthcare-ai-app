@@ -1,11 +1,13 @@
 from pydantic import BaseModel, validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from ..models.clinic import ClinicType
 from ..utils.validators import SecurityValidatorMixin, SecureTextValidator
 
 class ClinicBase(BaseModel, SecurityValidatorMixin):
     name: str
     license_number: str
+    clinic_type: Optional[ClinicType] = None
     address: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
@@ -31,6 +33,7 @@ class ClinicCreate(ClinicBase):
 
 class ClinicUpdate(BaseModel, SecurityValidatorMixin):
     name: Optional[str] = None
+    clinic_type: Optional[ClinicType] = None
     address: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None

@@ -18,7 +18,7 @@ export default function PatientDocuments() {
 
   useEffect(() => {
     fetchDocuments()
-  }, [session, filters, page])
+  }, [session?.accessToken, filters.status, filters.document_type, page])
 
   // Helper function to clear session and redirect to landing page
   const clearSessionAndRedirect = async () => {

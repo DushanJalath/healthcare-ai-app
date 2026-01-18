@@ -11,7 +11,7 @@ export default function AuditLogsPage() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.CLINIC_ADMIN]}>
       <Head>
-        <title>Audit Logs - Healthcare AI</title>
+        <title>Audit Logs - MediKeep</title>
       </Head>
       
       <div className="min-h-screen bg-gray-50">

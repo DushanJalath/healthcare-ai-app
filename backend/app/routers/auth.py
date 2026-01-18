@@ -29,6 +29,28 @@ async def register(
             detail="Email already registered"
         )
     
+    # Validate clinic license for clinic staff
+    clinic_id = None
+    if user_data.role == UserRole.CLINIC_STAFF:
+        if not user_data.clinic_license:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Clinic license number required for clinic staff"
+            )
+        # Find clinic by license number
+        db_clinic = db.query(Clinic).filter(Clinic.license_number == user_data.clinic_license).first()
+        if not db_clinic:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Clinic not found with the provided license number"
+            )
+        if not db_clinic.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Clinic is not active"
+            )
+        clinic_id = db_clinic.id
+    
     # Create user
     hashed_password = get_password_hash(user_data.password)
     db_user = User(
@@ -36,7 +58,8 @@ async def register(
         hashed_password=hashed_password,
         first_name=user_data.first_name,
         last_name=user_data.last_name,
-        role=user_data.role
+        role=user_data.role,
+        clinic_id=clinic_id  # Set clinic_id for clinic staff
     )
     db.add(db_user)
     db.commit()
@@ -57,6 +80,12 @@ async def register(
         )
         db.add(db_clinic)
         db.commit()
+        db.refresh(db_clinic)
+        
+        # Update user with clinic_id
+        db_user.clinic_id = db_clinic.id
+        db.commit()
+        db.refresh(db_user)
     
     # Create patient profile if user is patient
     if user_data.role == UserRole.PATIENT:

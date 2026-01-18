@@ -24,7 +24,7 @@ export default function ClinicDashboard() {
 
   const fetchDashboardData = async () => {
     if (!session?.accessToken) return
-    
+
     try {
       const response = await api.get('/clinic/dashboard', {
         headers: { Authorization: `Bearer ${session.accessToken}` }
@@ -44,7 +44,7 @@ export default function ClinicDashboard() {
       view_reports: '/reports',
       clinic_settings: '/clinic/settings'
     }
-    
+
     if (actions[action]) {
       router.push(actions[action])
     }
@@ -56,7 +56,7 @@ export default function ClinicDashboard() {
       manage_storage: '/clinic/storage',
       process_documents: '/documents?status=uploaded'
     }
-    
+
     if (alertActions[action]) {
       router.push(alertActions[action])
     }
@@ -75,12 +75,12 @@ export default function ClinicDashboard() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]}>
       <Head>
-        <title>Clinic Dashboard - Healthcare AI</title>
+        <title>Clinic Dashboard - MediKeep</title>
       </Head>
-      
+
       <div className="min-h-screen bg-gray-50">
         {/* Header with Profile Dropdown */}
-        <Navbar 
+        <Navbar
           title="Clinic Dashboard"
           subtitle="Welcome back! Here's what's happening in your clinic."
           showRefresh={true}
@@ -105,7 +105,7 @@ export default function ClinicDashboard() {
                     <div className="font-medium">Add Patient</div>
                     <div className="text-sm text-gray-600">Register new patient</div>
                   </button>
-                  
+
                   <button
                     onClick={() => handleQuickAction('upload_documents')}
                     className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left"
@@ -114,7 +114,7 @@ export default function ClinicDashboard() {
                     <div className="font-medium">Upload Documents</div>
                     <div className="text-sm text-gray-600">Add medical documents</div>
                   </button>
-                  
+
                   <Link
                     href="/patients"
                     className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left block"
@@ -123,7 +123,7 @@ export default function ClinicDashboard() {
                     <div className="font-medium">View Patients</div>
                     <div className="text-sm text-gray-600">Manage patient records</div>
                   </Link>
-                  
+
                   <Link
                     href="/documents"
                     className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left block"
@@ -141,8 +141,8 @@ export default function ClinicDashboard() {
                 <RecentActivity activities={stats.recent_activity} />
 
                 {/* System Alerts */}
-                <SystemAlerts 
-                  alerts={stats.system_alerts} 
+                <SystemAlerts
+                  alerts={stats.system_alerts}
                   onActionClick={handleAlertAction}
                 />
               </div>
@@ -171,7 +171,7 @@ export default function ClinicDashboard() {
                   <h3 className="text-lg font-medium text-gray-900 mb-4">
                     Patient Demographics
                   </h3>
-                  
+
                   {stats.patient_demographics.gender_distribution && (
                     <div className="mb-4">
                       <h4 className="text-sm font-medium text-gray-700 mb-2">By Gender</h4>
@@ -185,7 +185,7 @@ export default function ClinicDashboard() {
                       </div>
                     </div>
                   )}
-                  
+
                   {stats.patient_demographics.age_distribution && (
                     <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-2">By Age Group</h4>
@@ -205,7 +205,7 @@ export default function ClinicDashboard() {
           )}
         </div>
       </div>
-      
+
       <Toaster position="top-right" />
     </ProtectedRoute>
   )

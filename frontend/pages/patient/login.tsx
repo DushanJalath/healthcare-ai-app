@@ -8,8 +8,8 @@ export default function PatientLoginPage() {
   return (
     <>
       <Head>
-        <title>Patient Login - Healthcare AI</title>
-        <meta name="description" content="Login to Healthcare AI platform for patients" />
+        <title>Patient Login - MediKeep</title>
+        <meta name="description" content="Login to MediKeep platform for patients" />
       </Head>
       <LoginForm userType="patient" />
       <Toaster position="top-right" />

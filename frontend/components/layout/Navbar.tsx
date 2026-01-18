@@ -2,19 +2,31 @@ import { useState, useRef, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
+import Image from 'next/image'
+
+interface Clinic {
+  id: number
+  name: string
+}
 
 interface NavbarProps {
   title?: string
   subtitle?: string
   showRefresh?: boolean
   onRefresh?: () => void
+  clinics?: Clinic[]
+  selectedClinicId?: number | null
+  onClinicChange?: (clinicId: number | null) => void
 }
 
 export default function Navbar({ 
   title = 'Dashboard', 
   subtitle,
   showRefresh = false,
-  onRefresh 
+  onRefresh,
+  clinics = [],
+  selectedClinicId = null,
+  onClinicChange
 }: NavbarProps) {
   const { data: session } = useSession()
   const router = useRouter()
@@ -58,11 +70,11 @@ export default function Navbar({
   const getRoleBadgeColor = () => {
     switch (session?.user?.role) {
       case 'clinic_admin':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-medical-100 text-medical-800'
       case 'patient':
-        return 'bg-green-100 text-green-800'
+        return 'bg-tech-100 text-tech-800'
       case 'admin':
-        return 'bg-purple-100 text-purple-800'
+        return 'bg-gray-100 text-gray-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -77,13 +89,58 @@ export default function Navbar({
     <div className="bg-white shadow">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
-          {/* Left side - Title */}
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-            {subtitle && (
-              <p className="mt-1 text-sm text-gray-600">{subtitle}</p>
-            )}
+          {/* Left side - Logo and Title */}
+          <div className="flex items-center space-x-3 flex-1">
+            <Link href="/" className="flex items-center">
+              <Image
+                src="/medikeep.png"
+                alt="MediKeep Logo"
+                width={40}
+                height={40}
+                className="object-contain"
+              />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+              {subtitle && (
+                <p className="mt-1 text-sm text-gray-600">{subtitle}</p>
+              )}
+            </div>
           </div>
+
+          {/* Center - Clinic Selector */}
+                {clinics.length > 0 && onClinicChange && (
+            <div className="flex items-center space-x-2 mx-4">
+              <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider mr-2">
+                My Clinics:
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => onClinicChange(null)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    selectedClinicId === null
+                      ? 'bg-medical-50 text-medical-700 border border-medical-200'
+                      : 'text-gray-700 hover:bg-gray-50 border border-transparent'
+                  }`}
+                >
+                  All Clinics
+                </button>
+                {clinics.map((clinic) => (
+                  <button
+                    key={clinic.id}
+                    onClick={() => onClinicChange(clinic.id)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      selectedClinicId === clinic.id
+                        ? 'bg-medical-50 text-medical-700 border border-medical-200'
+                        : 'text-gray-700 hover:bg-gray-50 border border-transparent'
+                    }`}
+                  >
+                    {clinic.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           
           {/* Right side - Actions & Profile */}
           <div className="flex items-center space-x-4">
@@ -104,7 +161,7 @@ export default function Navbar({
                 className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 {/* Avatar */}
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-medical-500 to-tech-500 flex items-center justify-center text-white font-semibold text-sm">
                   {getUserInitials()}
                 </div>
                 

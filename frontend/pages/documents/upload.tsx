@@ -44,7 +44,7 @@ export default function DocumentUploadPage() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]}>
       <Head>
-        <title>Upload Documents - Healthcare AI</title>
+        <title>Upload Documents - MediKeep</title>
       </Head>
       
       <div className="min-h-screen bg-gray-50">

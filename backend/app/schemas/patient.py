@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, EmailStr, model_validator
 from typing import Optional, List
 from datetime import date, datetime
 from ..models.patient import Gender
@@ -39,6 +39,31 @@ class PatientBase(BaseModel, SecurityValidatorMixin):
 class PatientCreate(PatientBase):
     user_id: Optional[int] = None
     clinic_id: Optional[int] = None  # Will be set from current user's clinic
+    email: Optional[EmailStr] = None  # Patient email for account creation
+    first_name: Optional[str] = None  # Patient first name for account creation
+    last_name: Optional[str] = None  # Patient last name for account creation
+    
+    @validator('first_name', 'last_name')
+    def validate_names(cls, v):
+        if v is not None and v.strip():
+            return SecureTextValidator.sanitize_name(v) if v else None
+        return None
+    
+    @model_validator(mode='after')
+    def validate_email_with_names(self):
+        # If email is provided, first_name and last_name should also be provided
+        email = self.email
+        first_name = self.first_name
+        last_name = self.last_name
+        
+        if email:
+            if not first_name or not last_name:
+                raise ValueError('first_name and last_name are required when email is provided')
+        elif first_name or last_name:
+            # If names are provided without email, that's also fine - email is optional
+            pass
+            
+        return self
 
 class PatientUpdate(BaseModel, SecurityValidatorMixin):
     date_of_birth: Optional[date] = None
@@ -66,7 +91,8 @@ class PatientUpdate(BaseModel, SecurityValidatorMixin):
 class PatientResponse(PatientBase):
     id: int
     user_id: Optional[int]
-    clinic_id: Optional[int] = None
+    clinic_id: Optional[int] = None  # Deprecated: kept for backward compatibility
+    clinic_ids: Optional[List[int]] = None  # New: list of clinic IDs from memberships
     created_at: datetime
     updated_at: Optional[datetime]
     
@@ -77,7 +103,8 @@ class PatientDetailResponse(PatientResponse):
     user_first_name: Optional[str] = None
     user_last_name: Optional[str] = None
     user_email: Optional[str] = None
-    clinic_name: Optional[str] = None
+    clinic_name: Optional[str] = None  # Deprecated: primary clinic name
+    clinic_names: Optional[List[str]] = None  # New: list of clinic names from memberships
     documents_count: Optional[int] = 0
     last_visit: Optional[datetime] = None
 

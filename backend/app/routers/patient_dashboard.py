@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from ..database import get_db
 from ..models.patient import Patient
+from ..models.patient_clinic import PatientClinic
 from ..models.document import Document, DocumentStatus, DocumentType
 from ..models.extraction import Extraction
 from ..models.user import User, UserRole
@@ -35,10 +36,11 @@ class PatientDashboardResponse(BaseModel):
 @router.get("/", response_model=PatientDashboardResponse)
 async def get_patient_dashboard(
     request: Request,
+    clinic_id: Optional[int] = Query(None, description="Filter dashboard data by clinic ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get patient dashboard data."""
+    """Get patient dashboard data. Optionally filter by clinic_id."""
     
     # Ensure user is a patient or find their patient record
     patient = None
@@ -49,6 +51,20 @@ async def get_patient_dashboard(
     else:
         raise HTTPException(status_code=403, detail="Access denied - patients only")
     
+    # Validate clinic_id if provided
+    if clinic_id:
+        # Check if patient is enrolled in this clinic
+        membership = db.query(PatientClinic).filter(
+            PatientClinic.patient_id == patient.id,
+            PatientClinic.clinic_id == clinic_id,
+            PatientClinic.is_active == True
+        ).first()
+        if not membership:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Patient is not enrolled in clinic {clinic_id}"
+            )
+    
     # Log dashboard access
     audit_logger = get_audit_logger(db)
     audit_logger.log_patient_action(
@@ -56,12 +72,14 @@ async def get_patient_dashboard(
         user=current_user,
         patient_id=patient.id,
         patient_name=patient.patient_id,
-        description="Accessed patient dashboard",
+        description=f"Accessed patient dashboard" + (f" (clinic {clinic_id})" if clinic_id else ""),
         request=request
     )
     
-    # Get patient documents
+    # Get patient documents - filter by clinic if specified
     documents_query = db.query(Document).filter(Document.patient_id == patient.id)
+    if clinic_id:
+        documents_query = documents_query.filter(Document.clinic_id == clinic_id)
     total_documents = documents_query.count()
     
     # Calculate stats
@@ -96,8 +114,8 @@ async def get_patient_dashboard(
         joinedload(Document.extractions)
     ).order_by(desc(Document.upload_date)).limit(10).all()
     
-    # Timeline events
-    timeline_events = _build_patient_timeline(patient.id, db)
+    # Timeline events - filter by clinic if specified
+    timeline_events = _build_patient_timeline(patient.id, db, clinic_id=clinic_id)
     
     # Build patient profile
     patient_profile = _build_patient_detail(patient, db)
@@ -240,18 +258,21 @@ async def get_patient_stats(
         "failed_documents": failed_docs
     }
 
-def _build_patient_timeline(patient_id: int, db: Session, days: int = 30) -> List[dict]:
-    """Build patient timeline events."""
+def _build_patient_timeline(patient_id: int, db: Session, days: int = 30, clinic_id: Optional[int] = None) -> List[dict]:
+    """Build patient timeline events. Optionally filter by clinic_id."""
     
     since_date = datetime.now() - timedelta(days=days)
     
     timeline = []
     
     # Document uploads
-    documents = db.query(Document).filter(
+    documents_query = db.query(Document).filter(
         Document.patient_id == patient_id,
         Document.upload_date >= since_date
-    ).order_by(desc(Document.upload_date)).all()
+    )
+    if clinic_id:
+        documents_query = documents_query.filter(Document.clinic_id == clinic_id)
+    documents = documents_query.order_by(desc(Document.upload_date)).all()
     
     for doc in documents:
         timeline.append({
@@ -292,13 +313,28 @@ def _build_patient_timeline(patient_id: int, db: Session, days: int = 30) -> Lis
 def _build_patient_detail(patient: Patient, db: Session):
     """Build detailed patient response."""
     
+    # Load clinic memberships to get all clinics
+    memberships = db.query(PatientClinic).filter(
+        PatientClinic.patient_id == patient.id,
+        PatientClinic.is_active == True
+    ).options(joinedload(PatientClinic.clinic)).all()
+    
+    # Get clinic IDs and names from memberships
+    clinic_ids = [m.clinic_id for m in memberships]
+    clinic_names = [m.clinic.name for m in memberships if m.clinic]
+    
+    # Get primary clinic (first active membership, or legacy clinic_id)
+    primary_clinic = memberships[0].clinic if memberships else patient.clinic
+    primary_clinic_name = primary_clinic.name if primary_clinic else None
+    
     # Get documents count
     documents_count = db.query(Document).filter(Document.patient_id == patient.id).count()
     
     response_data = {
         "id": patient.id,
         "user_id": patient.user_id,
-        "clinic_id": patient.clinic_id,
+        "clinic_id": patient.clinic_id,  # Keep for backward compatibility
+        "clinic_ids": clinic_ids,  # All clinic IDs from memberships
         "patient_id": patient.patient_id,
         "date_of_birth": patient.date_of_birth,
         "gender": patient.gender,
@@ -314,7 +350,8 @@ def _build_patient_detail(patient: Patient, db: Session):
         "user_first_name": patient.user.first_name if patient.user else None,
         "user_last_name": patient.user.last_name if patient.user else None,
         "user_email": patient.user.email if patient.user else None,
-        "clinic_name": patient.clinic.name if patient.clinic else None,
+        "clinic_name": primary_clinic_name,  # Primary clinic for backward compatibility
+        "clinic_names": clinic_names,  # All clinic names from memberships
         "documents_count": documents_count,
         "last_visit": None  # This could be calculated based on latest document or appointment
     }

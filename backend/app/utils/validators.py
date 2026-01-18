@@ -66,6 +66,38 @@ class SecureTextValidator:
             raise ValueError("Invalid phone number format")
         
         return value
+    
+    @classmethod
+    def validate_filename(cls, value: str) -> str:
+        """Validate and sanitize filename."""
+        if not value:
+            raise ValueError("Filename cannot be empty")
+        
+        return sanitize_filename(value)
+    
+    @classmethod
+    def sanitize_department_name(cls, value: str) -> str:
+        """Sanitize department name."""
+        if not value:
+            raise ValueError("Department name cannot be empty")
+        
+        sanitized = sanitize_text(value, max_length=100)
+        if len(sanitized) < 2:
+            raise ValueError("Department name must be at least 2 characters")
+        
+        return sanitized
+    
+    @classmethod
+    def sanitize_specialty_name(cls, value: str) -> str:
+        """Sanitize specialty name."""
+        if not value:
+            raise ValueError("Specialty name cannot be empty")
+        
+        sanitized = sanitize_text(value, max_length=100)
+        if len(sanitized) < 2:
+            raise ValueError("Specialty name must be at least 2 characters")
+        
+        return sanitized
 
 class SecureFileValidator:
     """Validators for file-related fields."""

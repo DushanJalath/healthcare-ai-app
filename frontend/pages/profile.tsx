@@ -32,6 +32,25 @@ export default function ProfilePage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
 
+  // Password change state
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  // Password validation
+  const validatePassword = (password: string) => {
+    return {
+      minLength: password.length >= 8,
+      hasUpperCase: /[A-Z]/.test(password),
+      hasLowerCase: /[a-z]/.test(password),
+      hasNumber: /[0-9]/.test(password),
+      isValid: password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password)
+    }
+  }
+
+  const passwordValidation = validatePassword(newPassword)
+
   useEffect(() => {
     fetchProfile()
   }, [session])
@@ -69,6 +88,71 @@ export default function ProfilePage() {
       toast.error(error.response?.data?.detail || 'Failed to update profile')
     } finally {
       setUpdating(false)
+    }
+  }
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!session?.accessToken) return
+
+    // Validation
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      toast.error('Please fill in all password fields')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match')
+      return
+    }
+
+    if (!passwordValidation.isValid) {
+      toast.error('Please ensure your password meets all requirements')
+      return
+    }
+
+    setChangingPassword(true)
+    try {
+      await api.post(
+        '/users/change-password',
+        { old_password: oldPassword, new_password: newPassword },
+        { headers: { Authorization: `Bearer ${session.accessToken}` } }
+      )
+      
+      toast.success('Password changed successfully! Logging you out...')
+      
+      // Clear form
+      setOldPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      
+      // Wait a moment for the toast to show, then logout
+      setTimeout(async () => {
+        // Clear session and redirect
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('user')
+        await signOut({ callbackUrl: '/' })
+      }, 1500)
+    } catch (error: any) {
+      // Handle FastAPI validation errors (can be array or string)
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail
+        if (Array.isArray(detail)) {
+          // FastAPI validation errors are arrays
+          const errorMessages = detail.map((err: any) => 
+            `${err.loc?.join('.')}: ${err.msg}`
+          ).join(', ')
+          toast.error(`Validation error: ${errorMessages}`)
+        } else if (typeof detail === 'string') {
+          toast.error(detail)
+        } else {
+          toast.error('Failed to change password')
+        }
+      } else {
+        toast.error('Failed to change password')
+      }
+    } finally {
+      setChangingPassword(false)
     }
   }
 
@@ -124,7 +208,7 @@ export default function ProfilePage() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>Profile & Settings - Healthcare AI</title>
+        <title>Profile & Settings - MediKeep</title>
       </Head>
 
       <div className="min-h-screen bg-gray-50">
@@ -181,6 +265,131 @@ export default function ProfilePage() {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {updating ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Change Password */}
+          <div className="bg-white shadow rounded-lg mb-6">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-medium text-gray-900">Change Password</h2>
+              <p className="text-sm text-gray-500">Update your account password</p>
+            </div>
+            
+            <form onSubmit={handleChangePassword} className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Current Password</label>
+                <input
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter current password"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                    newPassword && !passwordValidation.isValid
+                      ? 'border-red-300'
+                      : newPassword && passwordValidation.isValid
+                      ? 'border-green-300'
+                      : 'border-gray-300'
+                  }`}
+                  placeholder="Enter new password"
+                />
+                
+                {newPassword && (
+                  <div className="mt-2 space-y-1">
+                    <div className={`flex items-center text-xs ${
+                      passwordValidation.minLength ? 'text-green-600' : 'text-gray-500'
+                    }`}>
+                      <span className={`mr-2 ${passwordValidation.minLength ? 'text-green-500' : 'text-gray-400'}`}>
+                        {passwordValidation.minLength ? '✓' : '○'}
+                      </span>
+                      At least 8 characters
+                    </div>
+                    <div className={`flex items-center text-xs ${
+                      passwordValidation.hasUpperCase ? 'text-green-600' : 'text-gray-500'
+                    }`}>
+                      <span className={`mr-2 ${passwordValidation.hasUpperCase ? 'text-green-500' : 'text-gray-400'}`}>
+                        {passwordValidation.hasUpperCase ? '✓' : '○'}
+                      </span>
+                      One uppercase letter (A-Z)
+                    </div>
+                    <div className={`flex items-center text-xs ${
+                      passwordValidation.hasLowerCase ? 'text-green-600' : 'text-gray-500'
+                    }`}>
+                      <span className={`mr-2 ${passwordValidation.hasLowerCase ? 'text-green-500' : 'text-gray-400'}`}>
+                        {passwordValidation.hasLowerCase ? '✓' : '○'}
+                      </span>
+                      One lowercase letter (a-z)
+                    </div>
+                    <div className={`flex items-center text-xs ${
+                      passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'
+                    }`}>
+                      <span className={`mr-2 ${passwordValidation.hasNumber ? 'text-green-500' : 'text-gray-400'}`}>
+                        {passwordValidation.hasNumber ? '✓' : '○'}
+                      </span>
+                      One number (0-9)
+                    </div>
+                  </div>
+                )}
+                
+                {!newPassword && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Password must contain at least 8 characters with uppercase, lowercase, and a number
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                    confirmPassword && newPassword !== confirmPassword
+                      ? 'border-red-300'
+                      : confirmPassword && newPassword === confirmPassword && passwordValidation.isValid
+                      ? 'border-green-300'
+                      : 'border-gray-300'
+                  }`}
+                  placeholder="Confirm new password"
+                />
+                {confirmPassword && (
+                  <div className="mt-1">
+                    {newPassword === confirmPassword && passwordValidation.isValid ? (
+                      <p className="text-xs text-green-600 flex items-center">
+                        <span className="mr-1">✓</span>
+                        Passwords match
+                      </p>
+                    ) : newPassword !== confirmPassword ? (
+                      <p className="text-xs text-red-600 flex items-center">
+                        <span className="mr-1">✗</span>
+                        Passwords do not match
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-500">Enter password again to confirm</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={changingPassword || !passwordValidation.isValid || newPassword !== confirmPassword || !oldPassword || !newPassword || !confirmPassword}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {changingPassword ? 'Changing Password...' : 'Change Password'}
                 </button>
               </div>
             </form>

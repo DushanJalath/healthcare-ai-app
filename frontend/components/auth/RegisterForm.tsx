@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
+import Image from 'next/image'
 import api from '@/utils/api'
 import { UserRole } from '@/types'
 
@@ -20,7 +21,7 @@ interface RegisterFormData {
 export default function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-  
+
   const {
     register,
     handleSubmit,
@@ -33,7 +34,7 @@ export default function RegisterForm() {
 
   const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true)
-    
+
     try {
       await api.post('/auth/register', {
         email: data.email,
@@ -59,17 +60,27 @@ export default function RegisterForm() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
+          <div className="flex justify-center mb-6">
+            <Image
+              src="/medikeep.png"
+              alt="MediKeep Logo"
+              width={80}
+              height={80}
+              className="object-contain"
+              priority
+            />
+          </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Create your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Already have an account?{' '}
-            <Link href="/" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link href="/" className="font-medium text-medical-600 hover:text-medical-700">
               Go to login
             </Link>
           </p>
         </div>
-        
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -80,13 +91,13 @@ export default function RegisterForm() {
                 <input
                   {...register('first_name', { required: 'First name is required' })}
                   type="text"
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                 />
                 {errors.first_name && (
                   <p className="mt-1 text-sm text-red-600">{errors.first_name.message}</p>
                 )}
               </div>
-              
+
               <div>
                 <label htmlFor="last_name" className="block text-sm font-medium text-gray-700">
                   Last Name
@@ -94,7 +105,7 @@ export default function RegisterForm() {
                 <input
                   {...register('last_name', { required: 'Last name is required' })}
                   type="text"
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                 />
                 {errors.last_name && (
                   <p className="mt-1 text-sm text-red-600">{errors.last_name.message}</p>
@@ -115,7 +126,7 @@ export default function RegisterForm() {
                   }
                 })}
                 type="email"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -128,7 +139,7 @@ export default function RegisterForm() {
               </label>
               <select
                 {...register('role', { required: 'Role is required' })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
               >
                 <option value="">Select role</option>
                 <option value={UserRole.PATIENT}>Patient</option>
@@ -149,7 +160,7 @@ export default function RegisterForm() {
                   <input
                     {...register('clinic_name', { required: 'Clinic name is required' })}
                     type="text"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                   />
                   {errors.clinic_name && (
                     <p className="mt-1 text-sm text-red-600">{errors.clinic_name.message}</p>
@@ -163,13 +174,33 @@ export default function RegisterForm() {
                   <input
                     {...register('clinic_license', { required: 'License number is required' })}
                     type="text"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                   />
                   {errors.clinic_license && (
                     <p className="mt-1 text-sm text-red-600">{errors.clinic_license.message}</p>
                   )}
                 </div>
               </>
+            )}
+
+            {watchRole === UserRole.CLINIC_STAFF && (
+              <div>
+                <label htmlFor="clinic_license" className="block text-sm font-medium text-gray-700">
+                  Clinic License Number
+                </label>
+                <input
+                  {...register('clinic_license', { required: 'Clinic license number is required' })}
+                  type="text"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                  placeholder="Enter your clinic's license number"
+                />
+                {errors.clinic_license && (
+                  <p className="mt-1 text-sm text-red-600">{errors.clinic_license.message}</p>
+                )}
+                <p className="mt-1 text-sm text-gray-500">
+                  Enter the license number of the clinic you are joining.
+                </p>
+              </div>
             )}
 
             <div>
@@ -185,7 +216,7 @@ export default function RegisterForm() {
                   }
                 })}
                 type="password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
               />
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
@@ -202,7 +233,7 @@ export default function RegisterForm() {
                   validate: value => value === watchPassword || 'Passwords do not match'
                 })}
                 type="password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
               />
               {errors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
@@ -214,7 +245,7 @@ export default function RegisterForm() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-medical-600 hover:bg-medical-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-medical-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Creating Account...' : 'Create Account'}
             </button>

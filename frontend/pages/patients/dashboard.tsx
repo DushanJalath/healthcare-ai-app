@@ -9,7 +9,7 @@ export default function PatientDashboardPage() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.PATIENT]}>
       <Head>
-        <title>My Dashboard - Healthcare AI</title>
+        <title>My Dashboard - MediKeep</title>
       </Head>
       
       <PatientDashboard />

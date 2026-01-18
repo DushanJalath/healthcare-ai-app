@@ -11,9 +11,9 @@ from ..models.clinic import Clinic
 from ..models.document import Document
 from ..models.extraction import Extraction
 from ..models.audit_log import AuditLog
-from ..schemas.user import UserResponse, UserUpdate
+from ..schemas.user import UserResponse, UserUpdate, ChangePasswordRequest
 from ..utils.deps import get_current_active_user, require_admin
-from ..utils.auth import verify_password
+from ..utils.auth import verify_password, get_password_hash
 
 class DeleteAccountRequest(BaseModel):
     password: str
@@ -53,6 +53,33 @@ async def update_user_profile(
     db.commit()
     db.refresh(current_user)
     return UserResponse.from_orm(current_user)
+
+@router.post("/change-password")
+async def change_password(
+    password_data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Change user password. User will need to log in again after password change."""
+    # Verify old password
+    if not verify_password(password_data.old_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password"
+        )
+    
+    # Check if new password is different from old password
+    if verify_password(password_data.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password"
+        )
+    
+    # Hash and update password
+    current_user.hashed_password = get_password_hash(password_data.new_password)
+    db.commit()
+    
+    return {"message": "Password changed successfully. Please log in again."}
 
 def _delete_document_files(documents: List[Document]):
     """Helper function to delete document files from filesystem."""

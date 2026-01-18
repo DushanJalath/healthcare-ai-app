@@ -38,10 +38,11 @@ export default function PatientDashboard() {
   const [dashboardData, setDashboardData] = useState<PatientDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'timeline' | 'profile'>('overview')
+  const [selectedClinicId, setSelectedClinicId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchDashboardData()
-  }, [session])
+  }, [session?.accessToken, selectedClinicId])
 
   // Helper function to clear session and redirect to landing page
   const clearSessionAndRedirect = async () => {
@@ -58,10 +59,21 @@ export default function PatientDashboard() {
     if (!session?.accessToken) return
 
     try {
-      const response = await api.get('/patient-dashboard', {
+      const params = new URLSearchParams()
+      if (selectedClinicId) {
+        params.append('clinic_id', selectedClinicId.toString())
+      }
+      const queryString = params.toString()
+      const url = `/patient-dashboard/${queryString ? '?' + queryString : ''}`
+      const response = await api.get(url, {
         headers: { Authorization: `Bearer ${session.accessToken}` }
       })
       setDashboardData(response.data)
+      
+      // Set default selected clinic if not set and clinics are available
+      if (!selectedClinicId && response.data.patient_profile.clinic_ids && response.data.patient_profile.clinic_ids.length > 0) {
+        setSelectedClinicId(response.data.patient_profile.clinic_ids[0])
+      }
     } catch (error: any) {
       const status = error.response?.status
 
@@ -103,6 +115,14 @@ export default function PatientDashboard() {
     )
   }
 
+  // Get clinic list with IDs for selector
+  const clinics = dashboardData?.patient_profile.clinic_ids && dashboardData?.patient_profile.clinic_names
+    ? dashboardData.patient_profile.clinic_ids.map((id, index) => ({
+        id,
+        name: dashboardData.patient_profile.clinic_names?.[index] || `Clinic ${id}`
+      }))
+    : []
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with Profile Dropdown */}
@@ -111,9 +131,12 @@ export default function PatientDashboard() {
         subtitle={`Patient ID: ${dashboardData.patient_profile.patient_id}`}
         showRefresh={true}
         onRefresh={fetchDashboardData}
+        clinics={clinics}
+        selectedClinicId={selectedClinicId}
+        onClinicChange={setSelectedClinicId}
       />
 
-      {/* Welcome Section */}
+      {/* Main Content */}
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow p-6 text-white mb-8">
           <div className="flex items-center justify-between">
@@ -265,8 +288,7 @@ export default function PatientDashboard() {
         {activeTab === 'profile' && (
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Patient Profile</h3>
-            {/* Patient profile form would go here */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Patient ID</label>
                 <p className="mt-1 text-sm text-gray-900">{dashboardData.patient_profile.patient_id}</p>
@@ -291,6 +313,46 @@ export default function PatientDashboard() {
                 </p>
               </div>
             </div>
+            
+            {/* Clinics Section */}
+            {(dashboardData.patient_profile.clinic_names && dashboardData.patient_profile.clinic_names.length > 0) || dashboardData.patient_profile.clinic_name ? (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <h4 className="text-md font-semibold text-gray-900 mb-3">
+                  {dashboardData.patient_profile.clinic_names && dashboardData.patient_profile.clinic_names.length > 1 ? 'My Clinics' : 'My Clinic'}
+                </h4>
+                {dashboardData.patient_profile.clinic_names && dashboardData.patient_profile.clinic_names.length > 0 ? (
+                  <div className="space-y-2">
+                    {dashboardData.patient_profile.clinic_names.map((clinicName: string, index: number) => (
+                      <div
+                        key={index}
+                        className="flex items-center text-sm text-gray-900 bg-blue-50 px-4 py-2 rounded-md border border-blue-100"
+                      >
+                        <svg
+                          className="w-5 h-5 text-blue-600 mr-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                          />
+                        </svg>
+                        <span className="font-medium">{clinicName}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  dashboardData.patient_profile.clinic_name && (
+                    <p className="text-sm text-gray-900 bg-blue-50 px-4 py-2 rounded-md border border-blue-100">
+                      {dashboardData.patient_profile.clinic_name}
+                    </p>
+                  )
+                )}
+              </div>
+            ) : null}
           </div>
         )}
       </div>

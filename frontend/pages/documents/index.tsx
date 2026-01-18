@@ -13,7 +13,7 @@ export default function DocumentsPage() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>Document Management - Healthcare AI</title>
+        <title>Document Management - MediKeep</title>
       </Head>
       
       <div className="min-h-screen bg-gray-50">

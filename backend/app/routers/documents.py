@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -9,6 +9,7 @@ import os
 from ..database import get_db
 from ..models.document import Document, DocumentStatus, DocumentType
 from ..models.patient import Patient
+from ..models.patient_clinic import PatientClinic
 from ..models.user import User, UserRole
 from ..schemas.document import (
     DocumentCreate, DocumentUpdate, DocumentResponse, 
@@ -24,9 +25,9 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    patient_id: Optional[int] = None,
-    document_type: Optional[DocumentType] = None,
-    notes: Optional[str] = None,
+    patient_id: Optional[int] = Form(None),
+    document_type: Optional[DocumentType] = Form(None),
+    notes: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_clinic_access)
 ):
@@ -40,30 +41,39 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
     
-    # Get clinic_id based on user role
-    clinic_id = None
-    if current_user.role == UserRole.CLINIC_ADMIN or current_user.role == UserRole.CLINIC_STAFF:
-        clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
-        if not clinic:
-            # For clinic staff, find clinic through relationships
-            # This should be improved with proper clinic-user relationships
-            clinic_id = 1  # Default for now - should be properly implemented
-        else:
-            clinic_id = clinic.id
+    # Get clinic_id from user's clinic_id (both clinic_admin and clinic_staff now have this)
+    if not current_user.clinic_id:
+        # Clean up uploaded file
+        delete_file(file_path)
+        raise HTTPException(status_code=400, detail="User is not assigned to a clinic")
     
-    if not clinic_id:
-        raise HTTPException(status_code=400, detail="Cannot determine clinic association")
+    clinic_id = current_user.clinic_id
     
-    # Validate patient assignment
+    # Verify clinic exists and is active
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    if not clinic or not clinic.is_active:
+        # Clean up uploaded file
+        delete_file(file_path)
+        raise HTTPException(status_code=404, detail="Clinic not found or inactive")
+    
+    # Validate patient assignment - check PatientClinic membership
     if patient_id:
-        patient = db.query(Patient).filter(
-            Patient.id == patient_id,
-            Patient.clinic_id == clinic_id
-        ).first()
+        patient = db.query(Patient).filter(Patient.id == patient_id).first()
         if not patient:
             # Clean up uploaded file
             delete_file(file_path)
-            raise HTTPException(status_code=404, detail="Patient not found in your clinic")
+            raise HTTPException(status_code=404, detail="Patient not found")
+        
+        # Check if patient is enrolled in this clinic via PatientClinic
+        membership = db.query(PatientClinic).filter(
+            PatientClinic.patient_id == patient_id,
+            PatientClinic.clinic_id == clinic_id,
+            PatientClinic.is_active == True
+        ).first()
+        if not membership:
+            # Clean up uploaded file
+            delete_file(file_path)
+            raise HTTPException(status_code=404, detail="Patient is not enrolled in your clinic")
     
     # Create document record
     document = Document(
@@ -88,6 +98,7 @@ async def upload_document(
         document=DocumentResponse.from_orm(document)
     )
 
+@router.get("", response_model=DocumentListResponse)
 @router.get("/", response_model=DocumentListResponse)
 async def get_documents(
     page: int = Query(1, ge=1),
@@ -112,12 +123,12 @@ async def get_documents(
     
     elif current_user.role in [UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]:
         # Clinic users see documents from their clinic
-        clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
-        if clinic:
-            query = query.filter(Document.clinic_id == clinic.id)
+        # Use current_user.clinic_id which is available for both admin and staff
+        if current_user.clinic_id:
+            query = query.filter(Document.clinic_id == current_user.clinic_id)
         else:
-            # For clinic staff, implement proper clinic association
-            pass
+            # If no clinic_id assigned, return empty result
+            query = query.filter(Document.id == -1)  # Impossible condition
     
     # Apply filters
     if patient_id:
@@ -134,12 +145,81 @@ async def get_documents(
     offset = (page - 1) * per_page
     documents = query.offset(offset).limit(per_page).all()
     
+    # Calculate pagination flags
+    has_next = (page * per_page) < total
+    has_previous = page > 1
+    
     return DocumentListResponse(
         documents=[DocumentResponse.from_orm(doc) for doc in documents],
         total=total,
         page=page,
-        per_page=per_page
+        per_page=per_page,
+        has_next=has_next,
+        has_previous=has_previous
     )
+
+@router.get("/analytics")
+async def get_document_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_access)
+):
+    """Get document analytics and statistics."""
+    
+    # Get clinic - handle both clinic_admin and clinic_staff
+    if current_user.role == UserRole.CLINIC_ADMIN:
+        # Clinic admin - try admin_user_id first, then clinic_id
+        clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+        if not clinic and current_user.clinic_id:
+            clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    elif current_user.role == UserRole.CLINIC_STAFF:
+        # Clinic staff - use clinic_id
+        if not current_user.clinic_id:
+            raise HTTPException(status_code=400, detail="User is not assigned to a clinic")
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    else:
+        # Should not reach here due to require_clinic_access, but handle gracefully
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if not clinic:
+        raise HTTPException(status_code=400, detail="Clinic not found")
+    
+    # Build base query for clinic documents
+    base_query = db.query(Document).filter(Document.clinic_id == clinic.id)
+    
+    # Total documents
+    total = base_query.count()
+    
+    # Documents by status
+    status_stats = db.query(
+        Document.status,
+        func.count(Document.id)
+    ).filter(
+        Document.clinic_id == clinic.id
+    ).group_by(Document.status).all()
+    
+    by_status = {status.value: count for status, count in status_stats}
+    
+    # Documents by type
+    type_stats = db.query(
+        Document.document_type,
+        func.count(Document.id)
+    ).filter(
+        Document.clinic_id == clinic.id
+    ).group_by(Document.document_type).all()
+    
+    by_type = {doc_type.value: count for doc_type, count in type_stats}
+    
+    # Storage used
+    storage_used = db.query(func.sum(Document.file_size)).filter(
+        Document.clinic_id == clinic.id
+    ).scalar() or 0
+    
+    return {
+        "total": total,
+        "byStatus": by_status,
+        "byType": by_type,
+        "storageUsed": storage_used
+    }
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
@@ -287,56 +367,6 @@ async def delete_document(
     
     return {"message": "Document deleted successfully"}
 
-@router.get("/analytics")
-async def get_document_analytics(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_clinic_access)
-):
-    """Get document analytics and statistics."""
-    
-    # Get clinic
-    clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
-    if not clinic:
-        raise HTTPException(status_code=400, detail="Clinic not found")
-    
-    # Build base query for clinic documents
-    base_query = db.query(Document).filter(Document.clinic_id == clinic.id)
-    
-    # Total documents
-    total = base_query.count()
-    
-    # Documents by status
-    status_stats = db.query(
-        Document.status,
-        func.count(Document.id)
-    ).filter(
-        Document.clinic_id == clinic.id
-    ).group_by(Document.status).all()
-    
-    by_status = {status.value: count for status, count in status_stats}
-    
-    # Documents by type
-    type_stats = db.query(
-        Document.document_type,
-        func.count(Document.id)
-    ).filter(
-        Document.clinic_id == clinic.id
-    ).group_by(Document.document_type).all()
-    
-    by_type = {doc_type.value: count for doc_type, count in type_stats}
-    
-    # Storage used
-    storage_used = db.query(func.sum(Document.file_size)).filter(
-        Document.clinic_id == clinic.id
-    ).scalar() or 0
-    
-    return {
-        "total": total,
-        "byStatus": by_status,
-        "byType": by_type,
-        "storageUsed": storage_used
-    }
-
 @router.post("/bulk")
 async def bulk_document_operation(
     request: BulkDocumentOperationRequest,
@@ -409,4 +439,5 @@ async def bulk_document_operation(
         return {"message": f"{len(documents)} documents type updated successfully"}
     
     else:
+        raise HTTPException(status_code=400, detail=f"Unknown operation: {request.operation}")
         raise HTTPException(status_code=400, detail=f"Unknown operation: {request.operation}")

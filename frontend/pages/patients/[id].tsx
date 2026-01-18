@@ -140,7 +140,7 @@ export default function PatientDetailPage() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>Patient: {patient.patient_id} - Healthcare AI</title>
+        <title>Patient: {patient.patient_id} - MediKeep</title>
       </Head>
       
       <div className="min-h-screen bg-gray-50">
@@ -321,12 +321,42 @@ export default function PatientDetailPage() {
                 </div>
 
                 {/* Clinic Information */}
-                {patient.clinic_name && (
+                {(patient.clinic_names && patient.clinic_names.length > 0) || patient.clinic_name ? (
                   <div className="bg-white shadow rounded-lg p-6">
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">Clinic</h2>
-                    <p className="text-sm text-gray-900">{patient.clinic_name}</p>
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      {patient.clinic_names && patient.clinic_names.length > 1 ? 'Clinics' : 'Clinic'}
+                    </h2>
+                    {patient.clinic_names && patient.clinic_names.length > 0 ? (
+                      <div className="space-y-2">
+                        {patient.clinic_names.map((clinicName, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center text-sm text-gray-900 bg-blue-50 px-3 py-2 rounded-md"
+                          >
+                            <svg
+                              className="w-5 h-5 text-blue-600 mr-2"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                              />
+                            </svg>
+                            <span className="font-medium">{clinicName}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      patient.clinic_name && (
+                        <p className="text-sm text-gray-900">{patient.clinic_name}</p>
+                      )
+                    )}
                   </div>
-                )}
+                ) : null}
 
                 {/* Statistics */}
                 <div className="bg-white shadow rounded-lg p-6">

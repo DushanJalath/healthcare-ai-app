@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Healthcare AI Platform",
-  description: "AI-powered healthcare document analysis",
+  title: "MediKeep - Intelligent Chronic Care Platform",
+  description: "Unified health record management for chronic care patients and clinics",
 };
 
 export default function RootLayout({

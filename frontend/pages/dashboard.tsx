@@ -37,7 +37,7 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Redirecting to your dashboard...</p>
         </div>
       </div>
@@ -47,7 +47,7 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>Dashboard - Healthcare AI</title>
+        <title>Dashboard - MediKeep</title>
       </Head>
       
       <div className="min-h-screen bg-gray-50">
@@ -56,7 +56,7 @@ export default function DashboardPage() {
             <div className="flex justify-between h-16">
               <div className="flex items-center">
                 <h1 className="text-xl font-semibold text-gray-900">
-                  Healthcare AI Dashboard
+                  MediKeep Dashboard
                 </h1>
               </div>
               
@@ -64,7 +64,7 @@ export default function DashboardPage() {
                 <span className="text-sm text-gray-700">
                   Welcome, {session?.user?.name}
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-medical-100 text-medical-800">
                   {session?.user?.role}
                 </span>
                 <button
@@ -83,13 +83,13 @@ export default function DashboardPage() {
             <div className="border-4 border-dashed border-gray-200 rounded-lg h-96 flex items-center justify-center">
               <div className="text-center">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                  Welcome to Healthcare AI
+                  Welcome to MediKeep
                 </h2>
                 <p className="text-gray-600 mb-6">
                   Your role: <span className="font-semibold">{session?.user?.role}</span>
                 </p>
                 <p className="text-gray-500">
-                  Admin Dashboard - Manage your healthcare platform
+                  Admin Dashboard - Manage your chronic care platform
                 </p>
               </div>
             </div>

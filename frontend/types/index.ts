@@ -196,7 +196,9 @@ export interface PatientDetailResponse extends Patient {
   user_first_name?: string
   user_last_name?: string
   user_email?: string
-  clinic_name?: string
+  clinic_name?: string  // Deprecated: primary clinic name for backward compatibility
+  clinic_names?: string[]  // New: list of all clinic names patient is enrolled in
+  clinic_ids?: number[]  // List of all clinic IDs patient is enrolled in
   documents_count?: number
   last_visit?: string
 }

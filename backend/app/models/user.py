@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
@@ -19,6 +19,7 @@ class User(Base):
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
     role = Column(Enum(UserRole), nullable=False)
+    clinic_id = Column(Integer, ForeignKey("clinics.id"), nullable=True)  # For clinic_staff and clinic_admin
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -26,5 +27,5 @@ class User(Base):
     audit_logs = relationship("AuditLog", back_populates="user", foreign_keys="[AuditLog.user_id]")
     
     # Relationships
-    clinic = relationship("Clinic", back_populates="users", uselist=False)
+    clinic = relationship("Clinic", foreign_keys=[clinic_id], back_populates="users", uselist=False)
     patient_profile = relationship("Patient", back_populates="user", uselist=False)
