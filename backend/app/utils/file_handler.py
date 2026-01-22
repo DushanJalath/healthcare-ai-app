@@ -12,7 +12,8 @@ from .security import scan_file_content, sanitize_filename, get_file_mime_type
 logger = logging.getLogger(__name__)
 
 # Configuration
-UPLOAD_DIR = Path("uploads")
+# Use absolute path to ensure consistency across different working directories
+UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB (increased from 10MB)
 ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".gif", ".tiff", ".bmp", ".docx", ".doc"}
 ALLOWED_MIME_TYPES = {
@@ -27,13 +28,23 @@ ALLOWED_MIME_TYPES = {
     "application/msword"
 }
 
-# Create upload directory structure
-UPLOAD_DIR.mkdir(exist_ok=True)
-(UPLOAD_DIR / "documents").mkdir(exist_ok=True)
-(UPLOAD_DIR / "temp").mkdir(exist_ok=True)
-(UPLOAD_DIR / "quarantine").mkdir(exist_ok=True)
-(UPLOAD_DIR / "deleted").mkdir(exist_ok=True)
-(UPLOAD_DIR / "backups").mkdir(exist_ok=True)
+# Create upload directory structure with proper error handling
+def ensure_upload_directories():
+    """Ensure all required upload directories exist, creating them if necessary."""
+    try:
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        (UPLOAD_DIR / "documents").mkdir(parents=True, exist_ok=True)
+        (UPLOAD_DIR / "temp").mkdir(parents=True, exist_ok=True)
+        (UPLOAD_DIR / "quarantine").mkdir(parents=True, exist_ok=True)
+        (UPLOAD_DIR / "deleted").mkdir(parents=True, exist_ok=True)
+        (UPLOAD_DIR / "backups").mkdir(parents=True, exist_ok=True)
+        logger.info(f"Upload directories initialized at: {UPLOAD_DIR}")
+    except OSError as e:
+        logger.error(f"Failed to create upload directories at {UPLOAD_DIR}: {e}")
+        raise RuntimeError(f"Cannot create upload directories: {e}")
+
+# Initialize directories on module import
+ensure_upload_directories()
 
 def enhanced_file_validation(file: UploadFile) -> Dict[str, Any]:
     """Enhanced file validation with security checks."""

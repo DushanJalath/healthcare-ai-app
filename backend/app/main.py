@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from .database import engine, Base
 from .models import User, Clinic, Patient, Document, Extraction
 from .routers import auth_router, users_router
@@ -14,8 +15,22 @@ import os
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-# Create upload directory
-os.makedirs("uploads/documents", exist_ok=True)
+# Create upload directory structure using absolute path
+# This ensures directories are created relative to the backend folder, not the current working directory
+backend_dir = Path(__file__).parent.parent
+uploads_base = backend_dir / "uploads"
+upload_dirs = [
+    uploads_base / "documents",
+    uploads_base / "temp",
+    uploads_base / "quarantine",
+    uploads_base / "deleted",
+    uploads_base / "backups"
+]
+for dir_path in upload_dirs:
+    try:
+        dir_path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"Warning: Could not create directory {dir_path}: {e}")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -34,7 +49,8 @@ app.add_middleware(
 )
 
 # Mount static files for uploads
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Use absolute path to ensure consistency
+app.mount("/uploads", StaticFiles(directory=str(uploads_base)), name="uploads")
 
 # Include routers
 app.include_router(auth_router)
