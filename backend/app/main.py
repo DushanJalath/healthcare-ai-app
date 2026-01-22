@@ -26,11 +26,21 @@ upload_dirs = [
     uploads_base / "deleted",
     uploads_base / "backups"
 ]
+
+print(f"Initializing upload directories at: {uploads_base}")
 for dir_path in upload_dirs:
     try:
         dir_path.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        print(f"Warning: Could not create directory {dir_path}: {e}")
+        # Verify directory is writable
+        if not dir_path.exists():
+            raise OSError(f"Directory was not created: {dir_path}")
+        if not os.access(dir_path, os.W_OK):
+            raise PermissionError(f"Directory is not writable: {dir_path}")
+        print(f"✓ Created/verified directory: {dir_path}")
+    except (OSError, PermissionError) as e:
+        print(f"✗ ERROR: Could not create directory {dir_path}: {e}")
+        print(f"  Please check permissions and ensure the path is accessible.")
+        # Don't exit here, but log the error - the file_handler will handle it
 
 # Initialize FastAPI app
 app = FastAPI(

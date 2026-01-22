@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 import shutil
 from typing import Optional, Tuple, Dict, Any, List
@@ -32,19 +33,34 @@ ALLOWED_MIME_TYPES = {
 def ensure_upload_directories():
     """Ensure all required upload directories exist, creating them if necessary."""
     try:
+        # Ensure base directory exists
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        (UPLOAD_DIR / "documents").mkdir(parents=True, exist_ok=True)
-        (UPLOAD_DIR / "temp").mkdir(parents=True, exist_ok=True)
-        (UPLOAD_DIR / "quarantine").mkdir(parents=True, exist_ok=True)
-        (UPLOAD_DIR / "deleted").mkdir(parents=True, exist_ok=True)
-        (UPLOAD_DIR / "backups").mkdir(parents=True, exist_ok=True)
+        
+        # Create all subdirectories
+        subdirs = ["documents", "temp", "quarantine", "deleted", "backups"]
+        for subdir in subdirs:
+            subdir_path = UPLOAD_DIR / subdir
+            subdir_path.mkdir(parents=True, exist_ok=True)
+            # Verify it was created and is writable
+            if not subdir_path.exists():
+                raise OSError(f"Failed to create directory: {subdir_path}")
+            if not os.access(subdir_path, os.W_OK):
+                raise PermissionError(f"Directory not writable: {subdir_path}")
+        
         logger.info(f"Upload directories initialized at: {UPLOAD_DIR}")
-    except OSError as e:
-        logger.error(f"Failed to create upload directories at {UPLOAD_DIR}: {e}")
-        raise RuntimeError(f"Cannot create upload directories: {e}")
+        return True
+    except (OSError, PermissionError) as e:
+        error_msg = f"Failed to create upload directories at {UPLOAD_DIR}: {e}"
+        # Print to stderr as well in case logging isn't configured
+        print(f"ERROR: {error_msg}", file=sys.stderr)
+        logger.error(error_msg)
+        # Don't raise here - let it fail later with better context
+        return False
 
 # Initialize directories on module import
-ensure_upload_directories()
+_directories_initialized = ensure_upload_directories()
+if not _directories_initialized:
+    print(f"WARNING: Upload directories may not be properly initialized. UPLOAD_DIR={UPLOAD_DIR}", file=sys.stderr)
 
 def enhanced_file_validation(file: UploadFile) -> Dict[str, Any]:
     """Enhanced file validation with security checks."""
@@ -124,8 +140,20 @@ async def secure_save_upload_file(file: UploadFile) -> Tuple[str, str, int, Dict
     temp_path = UPLOAD_DIR / "temp" / unique_filename
     final_path = UPLOAD_DIR / "documents" / unique_filename
     
+    # Ensure directories exist before writing (defensive check)
+    try:
+        temp_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.error(f"Cannot create upload directories: {e}. UPLOAD_DIR={UPLOAD_DIR}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cannot create upload directories: {str(e)}. Please check permissions."
+        )
+    
     # Save to temporary location first
     try:
+        logger.debug(f"Attempting to save file to: {temp_path}")
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
@@ -176,18 +204,34 @@ async def secure_save_upload_file(file: UploadFile) -> Tuple[str, str, int, Dict
         return str(final_path), unique_filename, file_size, metadata
     
     except Exception as e:
+        # Log detailed error information
+        logger.error(f"Detailed error in secure_save_upload_file: {type(e).__name__}: {str(e)}")
+        logger.error(f"UPLOAD_DIR: {UPLOAD_DIR}")
+        logger.error(f"temp_path: {temp_path}")
+        logger.error(f"final_path: {final_path}")
+        logger.error(f"temp_path.parent.exists(): {temp_path.parent.exists()}")
+        logger.error(f"final_path.parent.exists(): {final_path.parent.exists()}")
+        
         # Clean up on error
-        if temp_path.exists():
-            temp_path.unlink()
-        if final_path.exists():
-            final_path.unlink()
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+            if final_path.exists():
+                final_path.unlink()
+        except Exception as cleanup_error:
+            logger.warning(f"Error during cleanup: {cleanup_error}")
         
         if isinstance(e, HTTPException):
             raise e
         
+        # Provide more detailed error message
+        error_detail = f"Failed to save file: {type(e).__name__}: {str(e)}"
+        if isinstance(e, (PermissionError, OSError)):
+            error_detail += f". Upload directory: {UPLOAD_DIR}. Please check directory permissions."
+        
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to save file: {str(e)}"
+            detail=error_detail
         )
 
 # Wrapper function for compatibility with existing code
