@@ -9,9 +9,8 @@ export default function Home() {
         <title>MediKeep - Intelligent Chronic Care Platform</title>
         <meta name="description" content="Unified health record management for chronic care patients and clinics" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
       </Head>
-      
+
       <main className="min-h-screen bg-gradient-to-br from-medical-50 via-white to-tech-50">
         <div className="container mx-auto px-4 py-16">
           <div className="text-center max-w-4xl mx-auto">
@@ -31,26 +30,26 @@ export default function Home() {
                 <span className="bg-gradient-to-r from-medical-600 to-medical-700 bg-clip-text text-transparent">
                   MediKeep
                 </span>
-            </h1>
+              </h1>
               <p className="text-lg text-gray-600 font-medium">
                 Intelligent Chronic Care Platform
               </p>
             </div>
-            
+
             <p className="text-xl text-gray-700 mb-4 leading-relaxed">
               Tracking, Predicting and Personalizing care
             </p>
             <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
               Secure platform that unifies scattered medical data and helps patients get personalized, proactive care with intelligent insights and emergency support.
             </p>
-            
+
             <p className="text-gray-600 mb-8">
               New here?{' '}
               <Link href="/register" className="text-medical-600 hover:text-medical-700 font-semibold transition-colors">
                 Create an account
               </Link>
             </p>
-            
+
             <div className="grid md:grid-cols-2 gap-8 mt-12">
               <div className="bg-white p-8 rounded-xl shadow-md border border-medical-100 hover:shadow-lg transition-shadow">
                 <div className="w-12 h-12 bg-medical-100 rounded-lg flex items-center justify-center mb-4">
@@ -64,14 +63,14 @@ export default function Home() {
                 <p className="text-gray-600 mb-6 leading-relaxed">
                   Streamline patient document management with easy access to medical records, insights, and patient management tools.
                 </p>
-                <Link 
+                <Link
                   href="/clinic/login"
                   className="inline-block bg-medical-600 text-white px-6 py-3 rounded-lg hover:bg-medical-700 transition-colors font-medium"
                 >
                   Clinic Login
                 </Link>
               </div>
-              
+
               <div className="bg-white p-8 rounded-xl shadow-md border border-tech-100 hover:shadow-lg transition-shadow">
                 <div className="w-12 h-12 bg-tech-100 rounded-lg flex items-center justify-center mb-4">
                   <svg className="w-6 h-6 text-tech-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -84,7 +83,7 @@ export default function Home() {
                 <p className="text-gray-600 mb-6 leading-relaxed">
                   Secure storage and full ownership of your medical records. Access your complete health history with personalized insights.
                 </p>
-                <Link 
+                <Link
                   href="/patient/login"
                   className="inline-block bg-tech-600 text-white px-6 py-3 rounded-lg hover:bg-tech-700 transition-colors font-medium"
                 >

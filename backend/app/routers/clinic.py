@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, extract
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 
@@ -238,7 +238,7 @@ def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[D
     return activities[:limit]
 
 def _get_patient_demographics(clinic_id: int, db: Session) -> Dict[str, Any]:
-    """Get patient demographic breakdown."""
+    """Get patient demographic breakdown - optimized to use SQL instead of loading all patients."""
     
     # Gender distribution - use PatientClinic
     gender_stats = db.query(Patient.gender, func.count(Patient.id)).join(PatientClinic).filter(
@@ -251,38 +251,66 @@ def _get_patient_demographics(clinic_id: int, db: Session) -> Dict[str, Any]:
         for gender, count in gender_stats
     }
     
-    # Age distribution
+    # Age distribution - calculate using SQL date ranges (approximate but much faster)
     from datetime import date
     today = date.today()
-    age_groups = {'0-18': 0, '19-35': 0, '36-55': 0, '56-70': 0, '71+': 0}
     
-    patients_with_dob = db.query(Patient).join(PatientClinic).filter(
+    # Get patients with DOB count
+    patients_with_dob_count = db.query(Patient).join(PatientClinic).filter(
         PatientClinic.clinic_id == clinic_id,
         PatientClinic.is_active == True,
         Patient.date_of_birth.isnot(None)
-    ).distinct().all()
+    ).distinct().count()
     
-    for patient in patients_with_dob:
-        age = today.year - patient.date_of_birth.year
-        if patient.date_of_birth.month > today.month or \
-           (patient.date_of_birth.month == today.month and patient.date_of_birth.day > today.day):
-            age -= 1
-        
-        if age <= 18:
-            age_groups['0-18'] += 1
-        elif age <= 35:
-            age_groups['19-35'] += 1
-        elif age <= 55:
-            age_groups['36-55'] += 1
-        elif age <= 70:
-            age_groups['56-70'] += 1
-        else:
-            age_groups['71+'] += 1
+    # Calculate birth year ranges for each age group (approximate - uses year only)
+    # This is much faster than loading all patients and calculating exact age
+    current_year = today.year
+    max_birth_year_18 = current_year - 18
+    max_birth_year_35 = current_year - 35
+    max_birth_year_55 = current_year - 55
+    max_birth_year_70 = current_year - 70
+    
+    # Use a single query with conditional aggregation for better performance
+    from sqlalchemy import case
+    
+    # Build a query that counts patients in each age group
+    # We'll use year-based calculation (approximate but fast)
+    base_query = db.query(Patient).join(PatientClinic).filter(
+        PatientClinic.clinic_id == clinic_id,
+        PatientClinic.is_active == True,
+        Patient.date_of_birth.isnot(None)
+    ).distinct()
+    
+    # Count each age group (using year-based approximation)
+    birth_year = func.extract('year', Patient.date_of_birth)
+    
+    age_0_18 = base_query.filter(birth_year >= max_birth_year_18).count()
+    age_19_35 = base_query.filter(
+        birth_year < max_birth_year_18,
+        birth_year >= max_birth_year_35
+    ).count()
+    age_36_55 = base_query.filter(
+        birth_year < max_birth_year_35,
+        birth_year >= max_birth_year_55
+    ).count()
+    age_56_70 = base_query.filter(
+        birth_year < max_birth_year_55,
+        birth_year >= max_birth_year_70
+    ).count()
+    age_71_plus = base_query.filter(birth_year < max_birth_year_70).count()
+    
+    age_groups = {
+        '0-18': age_0_18,
+        '19-35': age_19_35,
+        '36-55': age_36_55,
+        '56-70': age_56_70,
+        '71+': age_71_plus
+    }
     
     return {
         "gender_distribution": gender_distribution,
         "age_distribution": age_groups,
-        "total_with_age_data": len(patients_with_dob)
+        "total_with_age_data": patients_with_dob_count
     }
 
 def _get_system_alerts(clinic_id: int, db: Session) -> List[Dict[str, Any]]:

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, desc
 from typing import List, Optional
 from datetime import datetime, timedelta, date
 
@@ -174,7 +174,7 @@ async def get_patients(
 ):
     """Get patients with enhanced filtering and search."""
     
-    # Build base query
+    # Build base query with eager loading to avoid N+1 queries
     query = db.query(Patient).options(
         joinedload(Patient.user),
         joinedload(Patient.clinic_memberships).joinedload(PatientClinic.clinic)
@@ -224,17 +224,38 @@ async def get_patients(
         else:
             query = query.filter(~Patient.documents.any())
     
-    # Get total count
+    # Get total count (before pagination)
     total = query.count()
     
     # Apply pagination
     offset = (page - 1) * per_page
     patients = query.offset(offset).limit(per_page).all()
     
-    # Build detailed responses
+    # Optimize: Pre-fetch document counts for all patients in one query
+    patient_ids = [p.id for p in patients]
+    doc_counts = db.query(
+        Document.patient_id,
+        func.count(Document.id).label('count')
+    ).filter(
+        Document.patient_id.in_(patient_ids)
+    ).group_by(Document.patient_id).all()
+    
+    doc_count_map = {pid: count for pid, count in doc_counts}
+    
+    # Get last document dates in one query
+    last_doc_results = db.query(
+        Document.patient_id,
+        func.max(Document.upload_date).label('last_upload')
+    ).filter(
+        Document.patient_id.in_(patient_ids)
+    ).group_by(Document.patient_id).all()
+    
+    last_doc_map = {pid: last_upload for pid, last_upload in last_doc_results}
+    
+    # Build detailed responses using pre-fetched data
     patient_details = []
     for patient in patients:
-        detail = _build_patient_detail(patient, db)
+        detail = _build_patient_detail_optimized(patient, doc_count_map.get(patient.id, 0), last_doc_map.get(patient.id))
         patient_details.append(detail)
     
     return PatientListResponse(
@@ -448,27 +469,49 @@ def _get_patient_detail(patient_id: int, db: Session, current_user: User) -> Pat
 def _build_patient_detail(patient: Patient, db: Session) -> PatientDetailResponse:
     """Build detailed patient response."""
     
-    # Load clinic memberships
-    memberships = db.query(PatientClinic).filter(
-        PatientClinic.patient_id == patient.id,
-        PatientClinic.is_active == True
-    ).options(joinedload(PatientClinic.clinic)).all()
+    # Use optimized version if data is already loaded
+    return _build_patient_detail_optimized(patient, None, None, db)
+
+def _build_patient_detail_optimized(
+    patient: Patient, 
+    documents_count: Optional[int] = None,
+    last_visit: Optional[datetime] = None,
+    db: Optional[Session] = None
+) -> PatientDetailResponse:
+    """Build detailed patient response with optional pre-fetched data to avoid N+1 queries."""
+    
+    # Get clinic memberships from already loaded relationship (if available)
+    memberships = patient.clinic_memberships if hasattr(patient, 'clinic_memberships') else []
+    # Filter active memberships
+    active_memberships = [m for m in memberships if m.is_active] if memberships else []
+    
+    # If memberships not loaded, query them (fallback)
+    if not active_memberships and db:
+        active_memberships = db.query(PatientClinic).filter(
+            PatientClinic.patient_id == patient.id,
+            PatientClinic.is_active == True
+        ).options(joinedload(PatientClinic.clinic)).all()
     
     # Get clinic IDs and names from memberships
-    clinic_ids = [m.clinic_id for m in memberships]
-    clinic_names = [m.clinic.name for m in memberships if m.clinic]
+    clinic_ids = [m.clinic_id for m in active_memberships]
+    clinic_names = [m.clinic.name for m in active_memberships if m.clinic]
     
     # Get primary clinic (first active membership, or legacy clinic_id)
-    primary_clinic = memberships[0].clinic if memberships else patient.clinic
+    primary_clinic = active_memberships[0].clinic if active_memberships else (patient.clinic if hasattr(patient, 'clinic') else None)
     primary_clinic_name = primary_clinic.name if primary_clinic else None
     
-    # Get documents count
-    documents_count = db.query(Document).filter(Document.patient_id == patient.id).count()
+    # Get documents count (use pre-fetched if available, otherwise query)
+    if documents_count is None and db:
+        documents_count = db.query(Document).filter(Document.patient_id == patient.id).count()
+    elif documents_count is None:
+        documents_count = 0
     
-    # Get last document upload date as proxy for last visit
-    last_document = db.query(Document).filter(
-        Document.patient_id == patient.id
-    ).order_by(Document.upload_date.desc()).first()
+    # Get last document upload date (use pre-fetched if available, otherwise query)
+    if last_visit is None and db:
+        last_document = db.query(Document).filter(
+            Document.patient_id == patient.id
+        ).order_by(desc(Document.upload_date)).first()
+        last_visit = last_document.upload_date if last_document else None
     
     response_data = PatientResponse.from_orm(patient).dict()
     
@@ -483,7 +526,7 @@ def _build_patient_detail(patient: Patient, db: Session) -> PatientDetailRespons
         "clinic_name": primary_clinic_name,  # Primary clinic for backward compatibility
         "clinic_names": clinic_names,  # All clinic names
         "documents_count": documents_count,
-        "last_visit": last_document.upload_date if last_document else None
+        "last_visit": last_visit
     })
     
     return PatientDetailResponse(**response_data)

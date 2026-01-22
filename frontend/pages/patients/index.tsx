@@ -31,7 +31,8 @@ export default function PatientsPage() {
     
     try {
       setLoading(true)
-      const params = new URLSearchParams({ page: '1', per_page: '100' })
+      // Reduced per_page from 100 to 50 for better performance
+      const params = new URLSearchParams({ page: '1', per_page: '50' })
       if (search) {
         params.append('search', search)
       }
@@ -73,7 +74,7 @@ export default function PatientsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.accessToken]) // Only depend on token to avoid re-fetches
 
-  // Debounced search
+  // Debounced search - optimized to avoid unnecessary re-renders
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current)
@@ -90,7 +91,9 @@ export default function PatientsPage() {
         clearTimeout(searchTimeoutRef.current)
       }
     }
-  }, [searchQuery, session?.accessToken, fetchPatients])
+    // Removed fetchPatients from deps to avoid infinite loops - it's already memoized with useCallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, session?.accessToken])
 
 
   const handleCreatePatient = async (patientData: any) => {

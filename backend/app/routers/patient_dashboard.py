@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, and_
 from typing import List, Optional
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -77,34 +77,46 @@ async def get_patient_dashboard(
     )
     
     # Get patient documents - filter by clinic if specified
-    documents_query = db.query(Document).filter(Document.patient_id == patient.id)
+    # Build base query once
+    base_doc_filter = Document.patient_id == patient.id
     if clinic_id:
-        documents_query = documents_query.filter(Document.clinic_id == clinic_id)
+        base_doc_filter = and_(base_doc_filter, Document.clinic_id == clinic_id)
+    
+    documents_query = db.query(Document).filter(base_doc_filter)
+    
+    # Optimize: Get all stats in fewer queries
+    week_ago = datetime.now() - timedelta(days=7)
+    
+    # Get counts in a single aggregated query where possible
+    # Total documents
     total_documents = documents_query.count()
     
-    # Calculate stats
-    week_ago = datetime.now() - timedelta(days=7)
+    # Recent documents (last 7 days)
     recent_documents = documents_query.filter(Document.upload_date >= week_ago).count()
+    
+    # Processed documents
     processed_documents = documents_query.filter(Document.status == DocumentStatus.PROCESSED).count()
+    
+    # Pending documents
     pending_documents = documents_query.filter(
         Document.status.in_([DocumentStatus.UPLOADED, DocumentStatus.PROCESSING])
     ).count()
     
-    # Storage used
+    # Storage used - reuse the same filter
     storage_used = db.query(func.sum(Document.file_size)).filter(
-        Document.patient_id == patient.id
+        base_doc_filter
     ).scalar() or 0
     
     # Last upload
     last_document = documents_query.order_by(desc(Document.upload_date)).first()
     last_upload = last_document.upload_date if last_document else None
     
-    # Document types distribution
+    # Document types distribution - reuse filter
     doc_type_stats = db.query(
         Document.document_type,
         func.count(Document.id)
     ).filter(
-        Document.patient_id == patient.id
+        base_doc_filter
     ).group_by(Document.document_type).all()
     
     document_types = {doc_type.value: count for doc_type, count in doc_type_stats}

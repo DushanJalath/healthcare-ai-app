@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -11,6 +11,7 @@ from ..models.document import Document, DocumentStatus, DocumentType
 from ..models.patient import Patient
 from ..models.patient_clinic import PatientClinic
 from ..models.user import User, UserRole
+from ..models.extraction import Extraction, ExtractionType, ExtractionStatus
 from ..schemas.document import (
     DocumentCreate, DocumentUpdate, DocumentResponse, 
     DocumentListResponse, DocumentAssignmentRequest, DocumentUploadResponse,
@@ -19,6 +20,7 @@ from ..schemas.document import (
 from ..models.clinic import Clinic
 from ..utils.deps import get_current_active_user, require_clinic_access
 from ..utils.file_handler import save_upload_file, delete_file, get_file_info
+from ..services.document_processing import process_document_ocr
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -97,6 +99,48 @@ async def upload_document(
         message="Document uploaded successfully",
         document=DocumentResponse.from_orm(document)
     )
+
+
+@router.post("/{document_id}/ocr")
+async def run_document_ocr(
+    document_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_access),
+):
+    """
+    Trigger OCR for a document and store the extracted text in `extractions.raw_text`.
+    Uses Google Vision OCR by default.
+    """
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Clinic permission (clinic users can only process their clinic's documents)
+    if current_user.clinic_id and document.clinic_id != current_user.clinic_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    extraction = Extraction(
+        document_id=document.id,
+        patient_id=document.patient_id,
+        extraction_type=ExtractionType.GENERAL,
+        status=ExtractionStatus.PENDING,
+        extraction_method="GOOGLE_OCR",
+    )
+
+    document.status = DocumentStatus.PROCESSING
+    db.add(extraction)
+    db.commit()
+    db.refresh(extraction)
+
+    background_tasks.add_task(process_document_ocr, document.id, extraction.id, use_google=True)
+
+    return {
+        "message": "OCR started",
+        "document_id": document.id,
+        "extraction_id": extraction.id,
+        "status": extraction.status.value,
+    }
 
 @router.get("", response_model=DocumentListResponse)
 @router.get("/", response_model=DocumentListResponse)

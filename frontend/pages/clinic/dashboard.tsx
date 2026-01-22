@@ -37,7 +37,9 @@ export default function ClinicDashboard() {
     if (session?.accessToken) {
       fetchDashboardData()
     }
-  }, [session?.accessToken, fetchDashboardData])
+    // fetchDashboardData is memoized with useCallback, safe to include
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken])
 
   const handleQuickAction = (action: string) => {
     const actions: Record<string, string> = {

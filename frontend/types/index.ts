@@ -65,13 +65,13 @@ export interface Patient {
   updated_at: string
 }
 
-// Document Types
+// Document Types - Must match backend enum values
 export enum DocumentType {
-  MEDICAL_REPORT = 'medical_report',
-  LAB_RESULT = 'lab_result',
+  LAB_REPORT = 'lab_report',
   PRESCRIPTION = 'prescription',
-  IMAGING = 'imaging',
-  REFERRAL = 'referral',
+  MEDICAL_RECORD = 'medical_record',
+  IMAGING_REPORT = 'imaging_report',
+  DISCHARGE_SUMMARY = 'discharge_summary',
   OTHER = 'other'
 }
 

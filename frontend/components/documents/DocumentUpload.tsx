@@ -11,10 +11,10 @@ interface DocumentUploadProps {
   onUploadComplete?: () => void
 }
 
-export default function DocumentUpload({ 
-  patients = [], 
-  selectedPatientId, 
-  onUploadComplete 
+export default function DocumentUpload({
+  patients = [],
+  selectedPatientId,
+  onUploadComplete
 }: DocumentUploadProps) {
   const { data: session } = useSession()
   const [selectedPatient, setSelectedPatient] = useState<number | undefined>(selectedPatientId)
@@ -22,32 +22,32 @@ export default function DocumentUpload({
   const [isUploading, setIsUploading] = useState(false)
 
   const handleUpload = async (
-    files: File[], 
+    files: File[],
     metadata: { patient_id?: number; document_type?: DocumentType; notes?: string }
   ) => {
     setIsUploading(true)
-    
+
     const uploads: FileUploadProgress[] = files.map(file => ({
       id: Math.random().toString(),
       file,
       progress: 0,
       status: 'pending'
     }))
-    
+
     setUploadProgress(uploads)
 
     try {
       for (let i = 0; i < uploads.length; i++) {
         const upload = uploads[i]
-        
+
         // Update status to uploading
-        setUploadProgress(prev => prev.map(u => 
+        setUploadProgress(prev => prev.map(u =>
           u.id === upload.id ? { ...u, status: 'uploading' as const } : u
         ))
 
         const formData = new FormData()
         formData.append('file', upload.file)
-        
+
         if (selectedPatient || metadata.patient_id) {
           formData.append('patient_id', String(selectedPatient || metadata.patient_id))
         }
@@ -67,7 +67,7 @@ export default function DocumentUpload({
             onUploadProgress: (progressEvent) => {
               if (progressEvent.total) {
                 const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-                setUploadProgress(prev => prev.map(u => 
+                setUploadProgress(prev => prev.map(u =>
                   u.id === upload.id ? { ...u, progress } : u
                 ))
               }
@@ -75,14 +75,28 @@ export default function DocumentUpload({
           })
 
           // Success
-          setUploadProgress(prev => prev.map(u => 
+          setUploadProgress(prev => prev.map(u =>
             u.id === upload.id ? { ...u, status: 'success' as const, progress: 100 } : u
           ))
-          
+
         } catch (error: any) {
-          // Error
-          const errorMessage = error.response?.data?.detail || 'Upload failed'
-          setUploadProgress(prev => prev.map(u => 
+          // Error - FastAPI 422 errors return detail as array of validation errors
+          let errorMessage = 'Upload failed'
+          if (error.response?.data?.detail) {
+            if (Array.isArray(error.response.data.detail)) {
+              // FastAPI validation errors format: [{loc: [...], msg: "...", type: "..."}]
+              const messages = error.response.data.detail.map((err: any) => {
+                const field = err.loc?.join('.') || 'field'
+                return `${field}: ${err.msg || 'Invalid value'}`
+              })
+              errorMessage = messages.join('; ')
+            } else if (typeof error.response.data.detail === 'string') {
+              errorMessage = error.response.data.detail
+            } else {
+              errorMessage = JSON.stringify(error.response.data.detail)
+            }
+          }
+          setUploadProgress(prev => prev.map(u =>
             u.id === upload.id ? { ...u, status: 'error' as const, error: errorMessage } : u
           ))
           toast.error(`Failed to upload ${upload.file.name}: ${errorMessage}`)
@@ -142,27 +156,26 @@ export default function DocumentUpload({
                 <span className="text-sm font-medium text-gray-700">
                   {upload.file.name}
                 </span>
-                <span className={`text-sm ${
-                  upload.status === 'success' ? 'text-green-600' :
-                  upload.status === 'error' ? 'text-red-600' :
-                  'text-blue-600'
-                }`}>
+                <span className={`text-sm ${upload.status === 'success' ? 'text-green-600' :
+                    upload.status === 'error' ? 'text-red-600' :
+                      'text-blue-600'
+                  }`}>
                   {upload.status === 'success' ? 'Complete' :
-                   upload.status === 'error' ? 'Failed' :
-                   upload.status === 'uploading' ? `${upload.progress}%` :
-                   'Pending'}
+                    upload.status === 'error' ? 'Failed' :
+                      upload.status === 'uploading' ? `${upload.progress}%` :
+                        'Pending'}
                 </span>
               </div>
-              
+
               {upload.status === 'uploading' && (
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${upload.progress}%` }}
                   ></div>
                 </div>
               )}
-              
+
               {upload.error && (
                 <p className="text-sm text-red-600 mt-1">{upload.error}</p>
               )}

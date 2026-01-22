@@ -28,6 +28,7 @@ pdf2image
 PyPDF2
 pdfplumber
 opencv-python
+google-cloud-vision
 
 # AI and machine learning
 openai
@@ -225,3 +226,4 @@ jsonschema
 
 # Development server reload
 watchfiles
+
