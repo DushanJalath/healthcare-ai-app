@@ -210,6 +210,11 @@ export default function PatientDocuments() {
                     {document.notes && (
                       <p className="mt-1 text-sm text-gray-600">{document.notes}</p>
                     )}
+                    {document.status === DocumentStatus.FAILED && document.processing_error && (
+                      <p className="mt-1 text-xs text-red-600" title={document.processing_error}>
+                        Reason: {document.processing_error.length > 80 ? document.processing_error.slice(0, 80) + '…' : document.processing_error}
+                      </p>
+                    )}
                   </div>
                   
                   <div className="flex items-center space-x-4">

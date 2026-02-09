@@ -77,7 +77,9 @@ export enum DocumentType {
 
 export enum DocumentStatus {
   PENDING = 'pending',
+  UPLOADED = 'uploaded',
   PROCESSING = 'processing',
+  PROCESSED = 'processed',
   COMPLETED = 'completed',
   FAILED = 'failed'
 }
@@ -86,18 +88,42 @@ export interface Document {
   id: number
   patient_id: number
   clinic_id: number
-  uploaded_by: number
+  uploaded_by?: number
   document_type: DocumentType
   status: DocumentStatus
   filename: string
+  /** Backend returns this as original_filename */
+  original_filename?: string
   file_path: string
   file_size: number
   mime_type: string
-  checksum: string
+  checksum?: string
   notes?: string
   processed_at?: string
+  /** Backend returns upload_date */
+  upload_date?: string
   created_at: string
   updated_at: string
+  /** When status is FAILED, reason from processing pipeline */
+  processing_error?: string
+}
+
+// RAG Chat types (patient document Q&A)
+export interface RAGChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface RAGChatRequest {
+  question: string
+  top_k?: number
+  chat_history?: RAGChatTurn[]
+}
+
+export interface RAGChatResponse {
+  answer: string
+  chunks: Array<{ content: string; metadata?: Record<string, unknown> }>
+  used_top_k: number
 }
 
 // Extraction Types

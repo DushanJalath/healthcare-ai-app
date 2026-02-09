@@ -14,6 +14,7 @@ export default function DocumentList({ patientId, refreshTrigger }: DocumentList
   const [documents, setDocuments] = useState<Document[]>([])
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [selectedDocument, setSelectedDocument] = useState<number | null>(null)
@@ -103,6 +104,30 @@ export default function DocumentList({ patientId, refreshTrigger }: DocumentList
     }
   }
 
+  const handleDelete = async (document: Document) => {
+    const confirmed = window.confirm(`Delete ${document.original_filename}? This action cannot be undone.`)
+    if (!confirmed || !session?.accessToken) return
+
+    try {
+      setDeletingId(document.id)
+      const { data } = await api.delete(`/documents/${document.id}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      })
+
+      if (data?.vector_cleanup_success === false) {
+        toast.success('Document deleted, but re-indexing will run shortly.')
+      } else {
+        toast.success('Document deleted successfully')
+      }
+
+      await fetchDocuments()
+    } catch (error) {
+      toast.error('Failed to delete document')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const getStatusBadge = (status: DocumentStatus) => {
     const styles = {
       [DocumentStatus.UPLOADED]: 'bg-blue-100 text-blue-800',
@@ -181,6 +206,11 @@ export default function DocumentList({ patientId, refreshTrigger }: DocumentList
                               {document.notes}
                             </div>
                           )}
+                          {document.status === 'failed' && document.processing_error && (
+                            <div className="text-xs text-red-600 mt-1" title={document.processing_error}>
+                              Reason: {document.processing_error.length > 60 ? document.processing_error.slice(0, 60) + '…' : document.processing_error}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -201,6 +231,14 @@ export default function DocumentList({ patientId, refreshTrigger }: DocumentList
                           className="text-blue-600 hover:text-blue-900"
                         >
                           Download
+                        </button>
+
+                        <button
+                          onClick={() => handleDelete(document)}
+                          disabled={deletingId === document.id}
+                          className={`text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {deletingId === document.id ? 'Deleting…' : 'Delete'}
                         </button>
                         
                         {!patientId && !document.patient_id && patients.length > 0 && (

@@ -5,6 +5,7 @@ import { Patient, Document, DocumentType, DocumentStatus } from '@/types'
 import PatientStats from './PatientStats'
 import PatientTimeline from './PatientTimeline'
 import PatientDocuments from './PatientDocuments'
+import PatientChatbot from './PatientChatbot'
 import Navbar from '@/components/layout/Navbar'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
@@ -37,7 +38,7 @@ export default function PatientDashboard() {
   const router = useRouter()
   const [dashboardData, setDashboardData] = useState<PatientDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'timeline' | 'profile'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'timeline' | 'chat' | 'profile'>('overview')
   const [selectedClinicId, setSelectedClinicId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -186,6 +187,15 @@ export default function PatientDashboard() {
               Timeline
             </button>
             <button
+              onClick={() => setActiveTab('chat')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'chat'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Ask about records
+            </button>
+            <button
               onClick={() => setActiveTab('profile')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'profile'
                 ? 'border-blue-500 text-blue-600'
@@ -259,6 +269,19 @@ export default function PatientDashboard() {
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('chat')}
+                  className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50"
+                >
+                  <div className="flex items-center">
+                    <div className="text-2xl mr-3">💬</div>
+                    <div>
+                      <div className="font-medium">Ask about records</div>
+                      <div className="text-sm text-gray-500">Chat with your document summaries</div>
+                    </div>
+                  </div>
+                </button>
+
+                <button
                   onClick={() => setActiveTab('profile')}
                   className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50"
                 >
@@ -281,6 +304,14 @@ export default function PatientDashboard() {
 
         {activeTab === 'timeline' && (
           <PatientTimeline events={dashboardData.timeline_events} />
+        )}
+
+        {activeTab === 'chat' && (
+          <PatientChatbot
+            patientId={dashboardData.patient_profile.id}
+            accessToken={session?.accessToken ?? ''}
+            hasDocuments={(dashboardData.stats.total_documents ?? 0) > 0}
+          />
         )}
 
         {activeTab === 'profile' && (
