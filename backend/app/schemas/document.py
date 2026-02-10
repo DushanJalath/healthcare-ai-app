@@ -272,6 +272,21 @@ class ShareLinkCreateResponse(BaseModel):
     token: str
     expires_at: datetime
 
+
+class ShareLinkGenerateRequest(BaseModel):
+    """Request payload when a patient generates a share link for specific documents."""
+
+    document_ids: List[int]
+    
+    @validator('document_ids')
+    def validate_document_ids(cls, v: List[int]) -> List[int]:
+        # Require at least one document and cap the number to a safe upper bound
+        if not v:
+            raise ValueError('At least one document must be selected to generate a share link')
+        if len(v) > 100:
+            raise ValueError('Cannot share more than 100 documents at once')
+        return v
+
 class DocumentShareRequest(BaseModel, SecurityValidatorMixin):
     document_id: int
     recipient_email: str

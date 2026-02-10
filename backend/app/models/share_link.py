@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -23,6 +23,10 @@ class MedicalRecordShareLink(Base):
     revoked = Column(Boolean, default=False, nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
     view_count = Column(Integer, default=0, nullable=False)
+
+    # Optional: restrict the share link to specific document IDs (comma-separated).
+    # When empty/null, all documents for the patient are shared.
+    document_ids = Column(Text, nullable=True)
 
     # Relationships
     patient = relationship("Patient", back_populates="share_links")

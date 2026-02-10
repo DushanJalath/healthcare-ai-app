@@ -2,9 +2,11 @@ from datetime import datetime, timedelta, timezone
 import os
 import secrets
 from pathlib import Path
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from ..database import get_db
 from ..models.patient import Patient
@@ -15,6 +17,7 @@ from ..schemas.document import (
     PublicSharedDocument,
     PublicShareLinkResponse,
     ShareLinkCreateResponse,
+    ShareLinkGenerateRequest,
 )
 from ..utils.deps import get_current_active_user
 
@@ -30,8 +33,30 @@ def _get_uploads_base() -> Path:
     return backend_dir / "uploads"
 
 
+def _ensure_document_ids_column(db: Session) -> None:
+    """
+    Ensure the medical_record_share_links table has the document_ids column.
+
+    This is a lightweight, idempotent schema adjustment to keep the database
+    in sync with the SQLAlchemy model in environments without migrations.
+    """
+    try:
+        db.execute(
+            text(
+                "ALTER TABLE medical_record_share_links "
+                "ADD COLUMN IF NOT EXISTS document_ids TEXT"
+            )
+        )
+        db.commit()
+    except Exception:
+        # If this fails (e.g. insufficient privileges), roll back and let the
+        # normal insert fail with a clear DB error instead of masking it.
+        db.rollback()
+
+
 @router.post("/generate", response_model=ShareLinkCreateResponse)
 async def generate_share_link_for_patient(
+    payload: ShareLinkGenerateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -48,6 +73,20 @@ async def generate_share_link_for_patient(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient profile not found")
 
+    # Make sure the backing table has the document_ids column before inserting.
+    _ensure_document_ids_column(db)
+
+    # Ensure all requested documents belong to this patient
+    requested_ids: List[int] = list(set(payload.document_ids))
+    documents_qs = (
+        db.query(Document.id)
+        .filter(Document.patient_id == patient.id, Document.id.in_(requested_ids))
+        .all()
+    )
+    valid_ids = [row.id for row in documents_qs]
+    if not valid_ids:
+        raise HTTPException(status_code=400, detail="No valid documents selected for sharing")
+
     # 24-hour expiry from now (UTC, timezone-aware)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
@@ -58,6 +97,7 @@ async def generate_share_link_for_patient(
         patient_id=patient.id,
         token=token,
         expires_at=expires_at,
+        document_ids=",".join(str(doc_id) for doc_id in valid_ids),
     )
 
     db.add(share_link)
@@ -100,13 +140,20 @@ async def get_shared_medical_records(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    # Load all documents for this patient
-    documents = (
-        db.query(Document)
-        .filter(Document.patient_id == patient.id)
-        .order_by(Document.upload_date.desc())
-        .all()
-    )
+    # Load documents for this patient, optionally restricted to the IDs stored on the link
+    selected_ids: Optional[list[int]] = None
+    if link.document_ids:
+        try:
+            selected_ids = [int(x) for x in link.document_ids.split(",") if x.strip()]
+        except ValueError:
+            # If parsing fails, fall back to sharing all documents for safety/compatibility
+            selected_ids = None
+
+    query = db.query(Document).filter(Document.patient_id == patient.id)
+    if selected_ids:
+        query = query.filter(Document.id.in_(selected_ids))
+
+    documents = query.order_by(Document.upload_date.desc()).all()
 
     uploads_base = _get_uploads_base()
     documents_public: list[PublicSharedDocument] = []

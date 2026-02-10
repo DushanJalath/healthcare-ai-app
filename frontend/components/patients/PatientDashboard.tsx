@@ -48,10 +48,51 @@ export default function PatientDashboard() {
   const [cardExpiry, setCardExpiry] = useState('')
   const [cardCvv, setCardCvv] = useState('')
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+  const [hasPaidForShare, setHasPaidForShare] = useState(false)
+  const [shareDocuments, setShareDocuments] = useState<Document[]>([])
+  const [shareDocumentsLoading, setShareDocumentsLoading] = useState(false)
+  const [selectedShareDocumentIds, setSelectedShareDocumentIds] = useState<number[]>([])
 
   useEffect(() => {
     fetchDashboardData()
   }, [session?.accessToken, selectedClinicId])
+
+  // Restore share-payment and last link state from localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const paymentExpiresAt = localStorage.getItem('share_payment_expires_at')
+    if (paymentExpiresAt) {
+      const paymentExpiryDate = new Date(paymentExpiresAt)
+      if (paymentExpiryDate > new Date()) {
+        setHasPaidForShare(true)
+      } else {
+        // Payment window expired - clear stored payment and link info
+        localStorage.removeItem('share_payment_expires_at')
+        localStorage.removeItem('share_last_link')
+        localStorage.removeItem('share_last_link_expires_at')
+      }
+    }
+
+    const storedLink = localStorage.getItem('share_last_link')
+    const storedLinkExpiresAt = localStorage.getItem('share_last_link_expires_at')
+    if (storedLink && storedLinkExpiresAt) {
+      const linkExpiryDate = new Date(storedLinkExpiresAt)
+      if (linkExpiryDate > new Date()) {
+        setShareLink(storedLink)
+        setShareExpiresAt(storedLinkExpiresAt)
+      } else {
+        localStorage.removeItem('share_last_link')
+        localStorage.removeItem('share_last_link_expires_at')
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'share') {
+      fetchShareDocuments()
+    }
+  }, [activeTab, session?.accessToken])
 
   // Helper function to clear session and redirect to landing page
   const clearSessionAndRedirect = async () => {
@@ -100,13 +141,39 @@ export default function PatientDashboard() {
     }
   }
 
-  const handleGenerateShareLink = async () => {
+  const fetchShareDocuments = async () => {
+    if (!session?.accessToken) return
+
+    try {
+      setShareDocumentsLoading(true)
+      const params = new URLSearchParams({
+        page: '1',
+        per_page: '50'
+      })
+
+      const response = await api.get(`/patient-dashboard/documents?${params}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      })
+
+      setShareDocuments(response.data)
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to load documents for sharing')
+    } finally {
+      setShareDocumentsLoading(false)
+    }
+  }
+
+  const handleGenerateShareLink = async (documentIds: number[]) => {
     if (!dashboardData) return
+    if (!documentIds.length) {
+      toast.error('Please select at least one document to share')
+      return
+    }
     try {
       setIsGeneratingShare(true)
       const response = await api.post<ShareLinkCreateResponse>(
         '/share/generate',
-        {},
+        { document_ids: documentIds },
         {
           headers: { Authorization: `Bearer ${session?.accessToken}` }
         }
@@ -116,6 +183,12 @@ export default function PatientDashboard() {
       const url = `${origin}/share/${token}`
       setShareLink(url)
       setShareExpiresAt(expires_at)
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('share_last_link', url)
+        localStorage.setItem('share_last_link_expires_at', expires_at as unknown as string)
+      }
+
       toast.success('24-hour share link generated')
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Failed to generate share link')
@@ -138,7 +211,12 @@ export default function PatientDashboard() {
       // Simulate payment processing delay
       await new Promise((resolve) => setTimeout(resolve, 1500))
       toast.success('Payment of Rs 100 successful')
-      await handleGenerateShareLink()
+      setHasPaidForShare(true)
+
+      if (typeof window !== 'undefined') {
+        const paymentExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        localStorage.setItem('share_payment_expires_at', paymentExpiry)
+      }
     } catch (error) {
       toast.error('Unable to process payment')
     } finally {
@@ -470,7 +548,7 @@ export default function PatientDashboard() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">Share Documents with Payment</h3>
             <p className="text-sm text-gray-600 mb-4">
               To share your medical documents, please pay <span className="font-semibold">Rs 100</span>. After payment,
-              a secure 24-hour share link will be generated.
+              you can select which documents to include in a secure 24-hour share link.
             </p>
 
             <form onSubmit={handlePayAndShare} className="space-y-4">
@@ -524,12 +602,65 @@ export default function PatientDashboard() {
 
               <button
                 type="submit"
-                disabled={isProcessingPayment || isGeneratingShare}
+                disabled={isProcessingPayment || hasPaidForShare}
                 className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60"
               >
-                {isProcessingPayment || isGeneratingShare ? 'Processing...' : 'Pay Rs 100 & Generate Link'}
+                {hasPaidForShare
+                  ? 'Payment active for 24 hours'
+                  : isProcessingPayment
+                    ? 'Processing payment...'
+                    : 'Pay Rs 100'}
               </button>
             </form>
+
+            {/* Document selection appears after successful payment */}
+            {hasPaidForShare && (
+              <div className="mt-8 border-t border-gray-200 pt-6">
+                <h4 className="text-md font-semibold text-gray-900 mb-3">Select Documents to Share</h4>
+                {shareDocumentsLoading ? (
+                  <p className="text-sm text-gray-500">Loading documents...</p>
+                ) : shareDocuments.length === 0 ? (
+                  <p className="text-sm text-gray-500">No documents available to share.</p>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+                    {shareDocuments.map((doc) => (
+                      <label
+                        key={doc.id}
+                        className="flex items-start space-x-3 px-4 py-3 hover:bg-gray-50 cursor-pointer text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded"
+                          checked={selectedShareDocumentIds.includes(doc.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedShareDocumentIds((prev) => [...prev, doc.id])
+                            } else {
+                              setSelectedShareDocumentIds((prev) => prev.filter((id) => id !== doc.id))
+                            }
+                          }}
+                        />
+                        <div>
+                          <p className="font-medium text-gray-900">{doc.original_filename}</p>
+                          <p className="text-xs text-gray-500">
+                            {doc.document_type} • {new Date(doc.upload_date).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handleGenerateShareLink(selectedShareDocumentIds)}
+                  disabled={!selectedShareDocumentIds.length || isGeneratingShare}
+                  className="mt-4 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-60"
+                >
+                  {isGeneratingShare ? 'Generating Link...' : 'Generate Share Link for Selected Documents'}
+                </button>
+              </div>
+            )}
 
             {shareLink && (
               <div className="mt-6 p-4 rounded-lg border border-dashed border-blue-500 bg-blue-50">
