@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/router'
-import { Patient, Document, DocumentType, DocumentStatus } from '@/types'
+import { Patient, Document, DocumentType, DocumentStatus, ShareLinkCreateResponse } from '@/types'
 import PatientStats from './PatientStats'
 import PatientTimeline from './PatientTimeline'
 import PatientDocuments from './PatientDocuments'
-import PatientChatbot from './PatientChatbot'
+import MediKeepChatWidget from './MediKeepChatWidget'
 import Navbar from '@/components/layout/Navbar'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
@@ -38,8 +38,16 @@ export default function PatientDashboard() {
   const router = useRouter()
   const [dashboardData, setDashboardData] = useState<PatientDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'timeline' | 'chat' | 'profile'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'timeline' | 'profile' | 'share'>('overview')
   const [selectedClinicId, setSelectedClinicId] = useState<number | null>(null)
+  const [shareLink, setShareLink] = useState<string | null>(null)
+  const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null)
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false)
+  const [cardName, setCardName] = useState('')
+  const [cardNumber, setCardNumber] = useState('')
+  const [cardExpiry, setCardExpiry] = useState('')
+  const [cardCvv, setCardCvv] = useState('')
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false)
 
   useEffect(() => {
     fetchDashboardData()
@@ -49,6 +57,7 @@ export default function PatientDashboard() {
   const clearSessionAndRedirect = async () => {
     // Clear localStorage
     localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
     localStorage.removeItem('user')
 
     // Sign out from NextAuth session and redirect to landing page
@@ -88,6 +97,52 @@ export default function PatientDashboard() {
       toast.error(error.response?.data?.detail || 'Failed to load dashboard')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGenerateShareLink = async () => {
+    if (!dashboardData) return
+    try {
+      setIsGeneratingShare(true)
+      const response = await api.post<ShareLinkCreateResponse>(
+        '/share/generate',
+        {},
+        {
+          headers: { Authorization: `Bearer ${session?.accessToken}` }
+        }
+      )
+      const { token, expires_at } = response.data
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const url = `${origin}/share/${token}`
+      setShareLink(url)
+      setShareExpiresAt(expires_at)
+      toast.success('24-hour share link generated')
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to generate share link')
+    } finally {
+      setIsGeneratingShare(false)
+    }
+  }
+
+  const handlePayAndShare = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    // Very basic front-end validation (no real payment processing)
+    if (!cardName || !cardNumber || !cardExpiry || !cardCvv) {
+      toast.error('Please fill in all card details')
+      return
+    }
+
+    try {
+      setIsProcessingPayment(true)
+      // Simulate payment processing delay
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      toast.success('Payment of Rs 100 successful')
+      await handleGenerateShareLink()
+    } catch (error) {
+      toast.error('Unable to process payment')
+    } finally {
+      setIsProcessingPayment(false)
     }
   }
 
@@ -187,15 +242,6 @@ export default function PatientDashboard() {
               Timeline
             </button>
             <button
-              onClick={() => setActiveTab('chat')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'chat'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              Ask about records
-            </button>
-            <button
               onClick={() => setActiveTab('profile')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'profile'
                 ? 'border-blue-500 text-blue-600'
@@ -203,6 +249,15 @@ export default function PatientDashboard() {
                 }`}
             >
               Profile
+            </button>
+            <button
+              onClick={() => setActiveTab('share')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'share'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Share Documents
             </button>
           </nav>
         </div>
@@ -269,19 +324,6 @@ export default function PatientDashboard() {
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('chat')}
-                  className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50"
-                >
-                  <div className="flex items-center">
-                    <div className="text-2xl mr-3">💬</div>
-                    <div>
-                      <div className="font-medium">Ask about records</div>
-                      <div className="text-sm text-gray-500">Chat with your document summaries</div>
-                    </div>
-                  </div>
-                </button>
-
-                <button
                   onClick={() => setActiveTab('profile')}
                   className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50"
                 >
@@ -293,7 +335,53 @@ export default function PatientDashboard() {
                     </div>
                   </div>
                 </button>
+
+                <button
+                onClick={() => setActiveTab('share')}
+                className="w-full text-left p-3 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100"
+                >
+                  <div className="flex items-center">
+                    <div className="text-2xl mr-3">🔗</div>
+                    <div>
+                      <div className="font-medium text-gray-600">Share All Documents (24 hours)</div>
+                      <div className="text-sm text-gray-600">
+                      Pay Rs 100 and generate a secure share link
+                      </div>
+                    </div>
+                  </div>
+                </button>
               </div>
+
+              {shareLink && (
+                <div className="mt-4 p-3 rounded-lg border border-dashed border-blue-500 bg-blue-100">
+                  <p className="text-sm font-medium text-blue-900 mb-2">Your 24-hour share link</p>
+                  <div className="flex flex-col space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={shareLink}
+                        className="flex-1 px-2 py-1 text-xs border border-blue-400 rounded-md bg-white text-gray-900"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(shareLink)
+                          toast.success('Link copied to clipboard')
+                        }}
+                        className="px-2 py-1 text-xs font-medium text-white bg-blue-700 rounded-md hover:bg-blue-800"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    {shareExpiresAt && (
+                      <p className="text-xs text-gray-600">
+                        Expires at:{' '}
+                        {new Date(shareExpiresAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -304,14 +392,6 @@ export default function PatientDashboard() {
 
         {activeTab === 'timeline' && (
           <PatientTimeline events={dashboardData.timeline_events} />
-        )}
-
-        {activeTab === 'chat' && (
-          <PatientChatbot
-            patientId={dashboardData.patient_profile.id}
-            accessToken={session?.accessToken ?? ''}
-            hasDocuments={(dashboardData.stats.total_documents ?? 0) > 0}
-          />
         )}
 
         {activeTab === 'profile' && (
@@ -384,7 +464,113 @@ export default function PatientDashboard() {
             ) : null}
           </div>
         )}
+
+        {activeTab === 'share' && (
+          <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Share Documents with Payment</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              To share your medical documents, please pay <span className="font-semibold">Rs 100</span>. After payment,
+              a secure 24-hour share link will be generated.
+            </p>
+
+            <form onSubmit={handlePayAndShare} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name on Card</label>
+                <input
+                  type="text"
+                  value={cardName}
+                  onChange={(e) => setCardName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                  placeholder="John Doe"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
+                <input
+                  type="text"
+                  value={cardNumber}
+                  onChange={(e) => setCardNumber(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                  placeholder="4242 4242 4242 4242"
+                  maxLength={19}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expiry (MM/YY)</label>
+                  <input
+                    type="text"
+                    value={cardExpiry}
+                    onChange={(e) => setCardExpiry(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                    placeholder="12/29"
+                    maxLength={5}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">CVV</label>
+                  <input
+                    type="password"
+                    value={cardCvv}
+                    onChange={(e) => setCardCvv(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                    placeholder="123"
+                    maxLength={4}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isProcessingPayment || isGeneratingShare}
+                className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60"
+              >
+                {isProcessingPayment || isGeneratingShare ? 'Processing...' : 'Pay Rs 100 & Generate Link'}
+              </button>
+            </form>
+
+            {shareLink && (
+              <div className="mt-6 p-4 rounded-lg border border-dashed border-blue-500 bg-blue-50">
+                <p className="text-sm font-medium text-blue-900 mb-2">Your 24-hour share link</p>
+                <div className="flex flex-col space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0">
+                    <input
+                      type="text"
+                      readOnly
+                      value={shareLink}
+                      className="flex-1 px-2 py-1 text-xs border border-blue-400 rounded-md bg-white text-gray-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(shareLink)
+                        toast.success('Link copied to clipboard')
+                      }}
+                      className="px-3 py-1 text-xs font-medium text-white bg-blue-700 rounded-md hover:bg-blue-800"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  {shareExpiresAt && (
+                    <p className="text-xs text-gray-600">
+                      Expires at: {new Date(shareExpiresAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Floating MediKeep Assistant - pop-up chatbot */}
+      <MediKeepChatWidget
+        patientId={dashboardData.patient_profile.id}
+        accessToken={session?.accessToken ?? ''}
+        hasDocuments={(dashboardData.stats.total_documents ?? 0) > 0}
+      />
     </div>
   )
 }

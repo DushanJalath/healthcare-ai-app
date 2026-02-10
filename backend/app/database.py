@@ -4,7 +4,12 @@ from sqlalchemy.orm import sessionmaker
 from .config import settings
 
 # Create SQLAlchemy engine
-engine = create_engine(settings.database_url)
+# pool_pre_ping avoids stale connections (e.g. "SSL connection has been closed unexpectedly")
+engine = create_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+)
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

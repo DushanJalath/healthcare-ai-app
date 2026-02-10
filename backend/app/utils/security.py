@@ -1,7 +1,10 @@
 import re
 import bleach
 import hashlib
-import magic
+try:
+    import magic
+except (ImportError, OSError):
+    magic = None  # e.g. libmagic not installed (common on Windows)
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from fastapi import HTTPException, Request
@@ -93,7 +96,9 @@ def validate_phone(phone: str) -> bool:
 
 # File security
 def get_file_mime_type(file_path: str) -> str:
-    """Get actual MIME type using python-magic."""
+    """Get actual MIME type using python-magic (if available)."""
+    if magic is None:
+        return "application/octet-stream"
     try:
         return magic.from_file(file_path, mime=True)
     except Exception:
@@ -169,6 +174,17 @@ def validate_sql_input(input_value: Any) -> bool:
             return False
     
     return True
+
+
+def sanitize_error_message_for_display(msg: Optional[str], max_length: int = 500) -> Optional[str]:
+    """Make server-generated error text safe for API response (passes SQL/security validators)."""
+    if not msg or not msg.strip():
+        return None
+    s = msg.strip()[:max_length]
+    # Replace chars that trigger SQL-injection validator so response still validates
+    s = s.replace("'", "`").replace('"', " ").replace(";", ",")
+    return s if s else None
+
 
 def get_client_ip(request: Request) -> str:
     """Get client IP address for rate limiting."""

@@ -33,7 +33,7 @@ export const authOptions: NextAuthOptions = {
             }
           })
 
-          const { access_token, user, token_type } = response.data
+          const { access_token, refresh_token, user, token_type } = response.data
 
           if (access_token && user) {
             return {
@@ -42,6 +42,8 @@ export const authOptions: NextAuthOptions = {
               name: `${user.first_name} ${user.last_name}`,
               role: user.role,
               accessToken: access_token,
+              refreshToken: refresh_token,
+              accessTokenExpires: Date.now() + (response.data.expires_in ?? 1800) * 1000,
               isActive: user.is_active,
               isVerified: user.is_verified,
               firstName: user.first_name,
@@ -69,11 +71,30 @@ export const authOptions: NextAuthOptions = {
       // Initial sign in
       if (user) {
         token.accessToken = user.accessToken
+        token.refreshToken = user.refreshToken
+        token.accessTokenExpires = user.accessTokenExpires
         token.role = user.role
         token.isActive = user.isActive
         token.isVerified = user.isVerified
         token.firstName = user.firstName
         token.lastName = user.lastName
+      }
+
+      // Refresh access token if expired (within 1 min buffer)
+      if (token.refreshToken && token.accessTokenExpires && Date.now() > token.accessTokenExpires - 60 * 1000) {
+        try {
+          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+            refresh_token: token.refreshToken
+          }, { headers: { 'Content-Type': 'application/json' } })
+          const { access_token, expires_in } = response.data
+          token.accessToken = access_token
+          token.accessTokenExpires = Date.now() + (expires_in ?? 1800) * 1000
+        } catch (err) {
+          // Refresh failed - clear token so user must re-login
+          token.accessToken = undefined
+          token.refreshToken = undefined
+          token.accessTokenExpires = undefined
+        }
       }
       return token
     },
@@ -94,7 +115,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 60 // 30 minutes (matches backend token expiry)
+    maxAge: 7 * 24 * 60 * 60 // 7 days - persist until refresh token expires or user logs out
   },
   secret: NEXTAUTH_SECRET,
   debug: false // Disable debug logs to reduce noise

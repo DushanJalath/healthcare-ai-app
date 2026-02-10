@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, desc
 from typing import List, Optional
 from pathlib import Path
 import os
@@ -20,20 +20,38 @@ from ..schemas.document import (
 from ..models.clinic import Clinic
 from ..utils.deps import get_current_active_user, require_clinic_access
 from ..utils.file_handler import save_upload_file, delete_file, get_file_info
+from ..utils.security import sanitize_error_message_for_display
 from ..services.document_processing import process_document_ocr
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
+
+def _resolve_patient_id(patient_id_raw: Optional[str], db: Session) -> Optional[int]:
+    """Resolve form patient_id (string) to Patient.id (int). Accepts numeric string or patient_id like 'p002'."""
+    if not patient_id_raw or not patient_id_raw.strip():
+        return None
+    raw = patient_id_raw.strip()
+    # Try as integer first (primary key id)
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    # Look up by patient_id (e.g. "p002", "PAT-XXX")
+    patient = db.query(Patient).filter(Patient.patient_id == raw).first()
+    return patient.id if patient else None
+
+
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    patient_id: Optional[int] = Form(None),
+    patient_id: Optional[str] = Form(None),
     document_type: Optional[DocumentType] = Form(None),
     notes: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_clinic_access)
 ):
-    """Upload a new document."""
+    """Upload a new document. Document is saved and Gemini Vision OCR is run in the background; extracted text is stored in the database. Requires GEMINI_API_KEY."""
     
     # Save file to storage
     try:
@@ -58,9 +76,15 @@ async def upload_document(
         delete_file(file_path)
         raise HTTPException(status_code=404, detail="Clinic not found or inactive")
     
+    # Resolve patient_id from form (string) to numeric Patient.id
+    patient_id_int = _resolve_patient_id(patient_id, db)
+    if patient_id and patient_id_int is None:
+        delete_file(file_path)
+        raise HTTPException(status_code=404, detail="Patient not found or invalid patient_id")
+    
     # Validate patient assignment - check PatientClinic membership
-    if patient_id:
-        patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if patient_id_int:
+        patient = db.query(Patient).filter(Patient.id == patient_id_int).first()
         if not patient:
             # Clean up uploaded file
             delete_file(file_path)
@@ -68,7 +92,7 @@ async def upload_document(
         
         # Check if patient is enrolled in this clinic via PatientClinic
         membership = db.query(PatientClinic).filter(
-            PatientClinic.patient_id == patient_id,
+            PatientClinic.patient_id == patient_id_int,
             PatientClinic.clinic_id == clinic_id,
             PatientClinic.is_active == True
         ).first()
@@ -79,7 +103,7 @@ async def upload_document(
     
     # Create document record
     document = Document(
-        patient_id=patient_id,
+        patient_id=patient_id_int,
         clinic_id=clinic_id,
         filename=unique_filename,
         original_filename=file.filename or "unknown",
@@ -94,10 +118,26 @@ async def upload_document(
     db.add(document)
     db.commit()
     db.refresh(document)
-    
+
+    # Create extraction record and run OCR in background (Gemini Vision only)
+    extraction = Extraction(
+        document_id=document.id,
+        patient_id=document.patient_id,
+        extraction_type=ExtractionType.GENERAL,
+        status=ExtractionStatus.PENDING,
+        extraction_method="GEMINI_OCR",
+    )
+    db.add(extraction)
+    document.status = DocumentStatus.PROCESSING
+    db.commit()
+    db.refresh(extraction)
+
+    background_tasks.add_task(process_document_ocr, document.id, extraction.id)
+
     return DocumentUploadResponse(
         message="Document uploaded successfully",
-        document=DocumentResponse.from_orm(document)
+        document=DocumentResponse.from_orm(document),
+        processing_started=True,
     )
 
 
@@ -110,7 +150,7 @@ async def run_document_ocr(
 ):
     """
     Trigger OCR for a document and store the extracted text in `extractions.raw_text`.
-    Uses Google Vision OCR by default.
+    Uses Gemini Vision OCR only (requires GEMINI_API_KEY).
     """
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
@@ -125,7 +165,7 @@ async def run_document_ocr(
         patient_id=document.patient_id,
         extraction_type=ExtractionType.GENERAL,
         status=ExtractionStatus.PENDING,
-        extraction_method="GOOGLE_OCR",
+        extraction_method="GEMINI_OCR",
     )
 
     document.status = DocumentStatus.PROCESSING
@@ -133,7 +173,7 @@ async def run_document_ocr(
     db.commit()
     db.refresh(extraction)
 
-    background_tasks.add_task(process_document_ocr, document.id, extraction.id, use_google=True)
+    background_tasks.add_task(process_document_ocr, document.id, extraction.id)
 
     return {
         "message": "OCR started",
@@ -188,11 +228,36 @@ async def get_documents(
     # Apply pagination
     offset = (page - 1) * per_page
     documents = query.offset(offset).limit(per_page).all()
-    
+    doc_ids = [d.id for d in documents]
+
+    # Load latest extraction error for failed documents (for processing_error in UI)
+    if doc_ids:
+        failed_errors = (
+            db.query(Extraction.document_id, Extraction.error_message)
+            .filter(
+                Extraction.document_id.in_(doc_ids),
+                Extraction.status == ExtractionStatus.FAILED,
+                Extraction.error_message.isnot(None),
+                Extraction.error_message != "",
+            )
+            .order_by(Extraction.document_id, desc(Extraction.completed_at))
+            .all()
+        )
+        # Keep first (latest) error per document_id
+        latest_error_by_doc = {}
+        for doc_id, err_msg in failed_errors:
+            if doc_id not in latest_error_by_doc:
+                latest_error_by_doc[doc_id] = err_msg
+        for doc in documents:
+            if doc.status == DocumentStatus.FAILED and doc.id in latest_error_by_doc:
+                doc.processing_error = sanitize_error_message_for_display(latest_error_by_doc[doc.id])
+            else:
+                doc.processing_error = None
+
     # Calculate pagination flags
     has_next = (page * per_page) < total
     has_previous = page > 1
-    
+
     return DocumentListResponse(
         documents=[DocumentResponse.from_orm(doc) for doc in documents],
         total=total,
@@ -287,7 +352,23 @@ async def get_document(
         clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
         if clinic and document.clinic_id != clinic.id:
             raise HTTPException(status_code=403, detail="Access denied")
-    
+
+    if document.status == DocumentStatus.FAILED:
+        latest_failed = (
+            db.query(Extraction.error_message)
+            .filter(
+                Extraction.document_id == document_id,
+                Extraction.status == ExtractionStatus.FAILED,
+                Extraction.error_message.isnot(None),
+            )
+            .order_by(desc(Extraction.completed_at))
+            .first()
+        )
+        raw_err = latest_failed[0] if latest_failed and latest_failed[0] else None
+        document.processing_error = sanitize_error_message_for_display(raw_err)
+    else:
+        document.processing_error = None
+
     return DocumentResponse.from_orm(document)
 
 @router.get("/{document_id}/download")
@@ -483,5 +564,4 @@ async def bulk_document_operation(
         return {"message": f"{len(documents)} documents type updated successfully"}
     
     else:
-        raise HTTPException(status_code=400, detail=f"Unknown operation: {request.operation}")
         raise HTTPException(status_code=400, detail=f"Unknown operation: {request.operation}")

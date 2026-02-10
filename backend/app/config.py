@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
     
     # Email settings for Google App Password
     smtp_server: str = "smtp.gmail.com"

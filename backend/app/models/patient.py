@@ -37,6 +37,12 @@ class Patient(Base):
     clinic = relationship("Clinic", back_populates="patients")
     documents = relationship("Document", back_populates="patient")
     extractions = relationship("Extraction", back_populates="patient")
+    # Public share links for this patient's medical records
+    share_links = relationship(
+        "MedicalRecordShareLink",
+        back_populates="patient",
+        cascade="all, delete-orphan"
+    )
     
     # Helper properties for backward compatibility and convenience
     @property

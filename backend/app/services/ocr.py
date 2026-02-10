@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Optional
 
 from .google_ocr import extract_text_google_bytes, GoogleOcrError
+from .gemini_ocr import extract_text_gemini, GeminiOcrError
+from .pdf_pages import pdf_to_pil_pages
 
 
 class OcrUnsupportedFileType(ValueError):
@@ -30,22 +32,16 @@ def extract_text_from_image_file_google(file_path: str, mime_type: Optional[str]
 
 def extract_text_from_pdf_google(file_path: str) -> str:
     """
-    MVP PDF OCR: convert PDF pages to images locally (pdf2image), then OCR each page.
-
-    Note: Google Vision performs best for PDFs via GCS async batch APIs.
-    This local approach keeps your current architecture simple and FastAPI-ready.
+    PDF OCR: convert PDF pages to images (pdf2image or PyMuPDF), then OCR each page with Google Vision.
     """
-    try:
-        from pdf2image import convert_from_path  # type: ignore
-    except Exception as e:
-        raise OcrUnsupportedFileType(
-            "pdf2image is required for PDF OCR but is not available."
-        ) from e
-
     if not os.path.exists(file_path):
         raise FileNotFoundError(file_path)
 
-    pages = convert_from_path(file_path)
+    try:
+        pages = pdf_to_pil_pages(file_path)
+    except Exception as e:
+        raise OcrUnsupportedFileType(str(e)) from e
+
     if not pages:
         return ""
 
@@ -58,29 +54,35 @@ def extract_text_from_pdf_google(file_path: str) -> str:
     return "\n\n".join(t for t in texts if t.strip())
 
 
-def extract_text(file_path: str, mime_type: Optional[str] = None, *, use_google: bool = True) -> str:
+def extract_text(
+    file_path: str,
+    mime_type: Optional[str] = None,
+    *,
+    use_google: bool = False,
+    use_gemini: bool = True,
+) -> str:
     """
-    Agentic switch for OCR engines.
-    - Google Vision: production default
-    - Tesseract: fallback (optional)
+    OCR using Gemini Vision only (use_gemini=True). Google Vision and other engines are disabled.
+    Requires GEMINI_API_KEY in environment.
     """
+    if use_gemini:
+        return extract_text_gemini(file_path, mime_type)
+
+    # Legacy paths (not used when app uses Gemini-only)
     if use_google:
         if _is_pdf(mime_type, file_path):
             return extract_text_from_pdf_google(file_path)
         return extract_text_from_image_file_google(file_path, mime_type)
 
-    # Fallback OCR engine (best-effort). Keep optional to avoid breaking prod.
     try:
         import pytesseract  # type: ignore
         from PIL import Image  # type: ignore
-        from pdf2image import convert_from_path  # type: ignore
     except Exception as e:
         raise GoogleOcrError(
-            "Fallback OCR requested but dependencies are missing (pytesseract/Pillow/pdf2image)."
+            "Fallback OCR requested but dependencies are missing (pytesseract/Pillow)."
         ) from e
-
     if _is_pdf(mime_type, file_path):
-        pages = convert_from_path(file_path)
+        pages = pdf_to_pil_pages(file_path)
         return "\n\n".join(pytesseract.image_to_string(p) for p in pages if p is not None)
     return pytesseract.image_to_string(Image.open(file_path))
 

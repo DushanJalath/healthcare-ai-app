@@ -74,7 +74,9 @@ class DocumentResponse(DocumentBase):
     has_extractions: Optional[bool] = False
     extraction_count: Optional[int] = 0
     last_extraction_date: Optional[datetime] = None
-    
+    # When status is FAILED, latest extraction error (for UI to show "Reason: ...")
+    processing_error: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -240,6 +242,35 @@ class DocumentMedicalSummary(BaseModel):
     extraction_confidence: float
     medical_coding_accuracy: Optional[float] = None
     validation_status: str
+
+
+class PublicSharedDocument(BaseModel):
+    """Minimal, safe document representation for public share pages."""
+
+    id: int
+    original_filename: str
+    document_type: Optional[DocumentType] = None
+    upload_date: datetime
+    file_size: int
+    file_url: str
+
+
+class PublicShareLinkResponse(BaseModel):
+    """Response returned for public read-only share links."""
+
+    patient_id: int
+    patient_identifier: Optional[str] = None
+    patient_first_name: Optional[str] = None
+    patient_last_name: Optional[str] = None
+    expires_at: datetime
+    documents: List[PublicSharedDocument]
+
+
+class ShareLinkCreateResponse(BaseModel):
+    """Response when a patient generates a new 24-hour share link."""
+
+    token: str
+    expires_at: datetime
 
 class DocumentShareRequest(BaseModel, SecurityValidatorMixin):
     document_id: int

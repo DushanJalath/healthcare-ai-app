@@ -8,8 +8,8 @@ from ..models.user import User,UserRole
 from ..models.clinic import Clinic
 from ..models.patient import Patient
 from ..schemas.auth import LoginRequest, RegisterRequest
-from ..schemas.user import Token, UserResponse
-from ..utils.auth import verify_password, get_password_hash, create_access_token
+from ..schemas.user import Token, UserResponse, RefreshTokenRequest, RefreshTokenResponse
+from ..utils.auth import verify_password, get_password_hash, create_access_token, create_refresh_token, verify_refresh_token
 from ..utils.deps import get_current_active_user
 from ..config import settings
 
@@ -125,13 +125,45 @@ async def login(
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
+    refresh_token = create_refresh_token(data={"sub": user.email})
     
     return {
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "expires_in": settings.access_token_expire_minutes * 60,
         "user": UserResponse.from_orm(user)
     }
+
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_access_token(
+    refresh_data: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
+    """Exchange refresh token for new access token to persist session."""
+    email = verify_refresh_token(refresh_data.refresh_token)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token"
+        )
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive"
+        )
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": settings.access_token_expire_minutes * 60,
+    }
+
 
 @router.post("/login/json", response_model=Token)
 async def login_json(
@@ -157,13 +189,16 @@ async def login_json(
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
+    refresh_token = create_refresh_token(data={"sub": user.email})
     
     return {
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "expires_in": settings.access_token_expire_minutes * 60,
         "user": UserResponse.from_orm(user)
     }
+
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_profile(

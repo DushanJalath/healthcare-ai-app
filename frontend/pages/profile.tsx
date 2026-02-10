@@ -133,6 +133,7 @@ export default function ProfilePage() {
       setTimeout(async () => {
         // Clear session and redirect
         localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
         localStorage.removeItem('user')
         await signOut({ callbackUrl: '/' })
       }, 1500)
@@ -176,6 +177,7 @@ export default function ProfilePage() {
       
       // Clear session and redirect
       localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
       localStorage.removeItem('user')
       await signOut({ callbackUrl: '/' })
     } catch (error: any) {

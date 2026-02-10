@@ -34,6 +34,7 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   access_token: string
+  refresh_token: string
   token_type: string
   expires_in: number
   user: User
@@ -106,6 +107,30 @@ export interface Document {
   updated_at: string
   /** When status is FAILED, reason from processing pipeline */
   processing_error?: string
+}
+
+// Public share link types
+export interface PublicSharedDocument {
+  id: number
+  original_filename: string
+  document_type: DocumentType | null
+  upload_date: string
+  file_size: number
+  file_url: string
+}
+
+export interface PublicShareLinkResponse {
+  patient_id: number
+  patient_identifier?: string | null
+  patient_first_name?: string | null
+  patient_last_name?: string | null
+  expires_at: string
+  documents: PublicSharedDocument[]
+}
+
+export interface ShareLinkCreateResponse {
+  token: string
+  expires_at: string
 }
 
 // RAG Chat types (patient document Q&A)

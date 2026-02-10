@@ -21,6 +21,24 @@ from ..utils.email import send_patient_welcome_email
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
+
+def _get_next_patient_id_for_clinic(clinic_id: int, db: Session) -> str:
+    """Generate next patient ID for the clinic, e.g. C1-0001, C1-0002."""
+    prefix = f"C{clinic_id}-"
+    # Find max numeric suffix among existing patient_ids with this prefix
+    patients_with_prefix = db.query(Patient.patient_id).filter(
+        Patient.patient_id.like(f"{prefix}%")
+    ).all()
+    max_seq = 0
+    for (pid,) in patients_with_prefix:
+        if pid and pid.startswith(prefix):
+            try:
+                seq = int(pid[len(prefix):])
+                max_seq = max(max_seq, seq)
+            except ValueError:
+                pass
+    return f"{prefix}{max_seq + 1:04d}"
+
 @router.post("", response_model=PatientDetailResponse)
 @router.post("/", response_model=PatientDetailResponse)
 async def create_patient(
@@ -112,8 +130,8 @@ async def create_patient(
         # First, try to find existing patient by user_id (if user exists)
         existing_patient = db.query(Patient).filter(Patient.user_id == user_id).first()
     
-    if not existing_patient:
-        # If not found by user_id, check by patient_id (patient_id is unique globally)
+    if not existing_patient and patient_data.patient_id:
+        # If not found by user_id, check by patient_id when provided (patient_id is unique globally)
         existing_patient = db.query(Patient).filter(
             Patient.patient_id == patient_data.patient_id
         ).first()
@@ -137,7 +155,12 @@ async def create_patient(
         patient = existing_patient
     else:
         # Create new patient record
+        # Auto-generate patient_id per clinic when not provided
+        patient_id_value = patient_data.patient_id
+        if not patient_id_value or not str(patient_id_value).strip():
+            patient_id_value = _get_next_patient_id_for_clinic(clinic_id, db)
         patient_dict = patient_data.dict(exclude={'clinic_id', 'email', 'first_name', 'last_name', 'user_id'})
+        patient_dict["patient_id"] = patient_id_value
         patient = Patient(
             **patient_dict,
             clinic_id=clinic_id,  # Set for backward compatibility

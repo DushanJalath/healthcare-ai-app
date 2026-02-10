@@ -66,7 +66,7 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
 
   const handleFormSubmit = (data: PatientFormData) => {
     // Transform data for API
-    const submitData = {
+    const submitData: any = {
       ...data,
       gender: data.gender || null,
       date_of_birth: data.date_of_birth || null,
@@ -84,6 +84,12 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
         first_name: data.first_name || null,
         last_name: data.last_name || null
       })
+    }
+    // For new patients: omit patient_id when blank so backend auto-generates per clinic
+    if (isNewPatient && (!submitData.patient_id || !String(submitData.patient_id).trim())) {
+      delete submitData.patient_id
+    } else if (submitData.patient_id !== undefined && !String(submitData.patient_id).trim()) {
+      submitData.patient_id = null
     }
     onSubmit(submitData)
   }
@@ -186,29 +192,31 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
         <h3 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Patient ID *
-            </label>
-            <input
-              {...register('patient_id', {
-                required: 'Patient ID is required',
-                pattern: {
-                  value: /^[a-zA-Z0-9._-]+$/,
-                  message: 'Only letters, numbers, dots, dashes and underscores allowed'
-                },
-                maxLength: {
-                  value: 20,
-                  message: 'Patient ID must be 20 characters or less'
-                }
-              })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g., P001, PAT-2024-001"
-            />
-            {errors.patient_id && (
-              <p className="mt-1 text-sm text-red-600">{errors.patient_id.message}</p>
-            )}
-          </div>
+          {!isNewPatient && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Patient ID *
+              </label>
+              <input
+                {...register('patient_id', {
+                  required: 'Patient ID is required',
+                  pattern: {
+                    value: /^[a-zA-Z0-9._-]+$/,
+                    message: 'Only letters, numbers, dots, dashes and underscores allowed'
+                  },
+                  maxLength: {
+                    value: 20,
+                    message: 'Patient ID must be 20 characters or less'
+                  }
+                })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g., P001, PAT-2024-001"
+              />
+              {errors.patient_id && (
+                <p className="mt-1 text-sm text-red-600">{errors.patient_id.message}</p>
+              )}
+            </div>
+          )}
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

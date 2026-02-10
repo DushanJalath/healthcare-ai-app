@@ -11,6 +11,7 @@ alembic
 # Data validation and settings
 pydantic
 pydantic-settings
+email-validator
 
 # Authentication and security
 python-jose[cryptography]
@@ -26,9 +27,11 @@ pytesseract
 Pillow
 pdf2image
 PyPDF2
+pymupdf
 pdfplumber
 opencv-python
 google-cloud-vision
+google-genai
 
 # AI and machine learning
 openai
@@ -64,8 +67,7 @@ structlog
 celery
 redis
 
-# Email notifications
-smtplib2
+# Email notifications (smtplib is stdlib; smtplib2 not on PyPI - removed)
 email-validator
 
 # PDF utilities (additional)

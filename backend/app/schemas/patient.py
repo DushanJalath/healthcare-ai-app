@@ -5,7 +5,7 @@ from ..models.patient import Gender
 from ..utils.validators import SecurityValidatorMixin, SecureTextValidator
 
 class PatientBase(BaseModel, SecurityValidatorMixin):
-    patient_id: str
+    patient_id: Optional[str] = None  # Required for response; optional for create (auto-generated per clinic)
     date_of_birth: Optional[date] = None
     gender: Optional[Gender] = None
     phone: Optional[str] = None
@@ -18,6 +18,8 @@ class PatientBase(BaseModel, SecurityValidatorMixin):
 
     @validator('patient_id')
     def validate_patient_id(cls, v):
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
         return SecureTextValidator.validate_patient_id_field(v)
     
     @validator('phone')
@@ -42,7 +44,7 @@ class PatientCreate(PatientBase):
     email: Optional[EmailStr] = None  # Patient email for account creation
     first_name: Optional[str] = None  # Patient first name for account creation
     last_name: Optional[str] = None  # Patient last name for account creation
-    
+
     @validator('first_name', 'last_name')
     def validate_names(cls, v):
         if v is not None and v.strip():

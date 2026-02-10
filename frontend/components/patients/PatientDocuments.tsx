@@ -23,6 +23,7 @@ export default function PatientDocuments() {
   // Helper function to clear session and redirect to landing page
   const clearSessionAndRedirect = async () => {
     localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
     localStorage.removeItem('user')
     await signOut({ redirect: false })
     router.push('/')
