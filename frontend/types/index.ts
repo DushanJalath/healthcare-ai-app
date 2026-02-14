@@ -107,6 +107,10 @@ export interface Document {
   updated_at: string
   /** When status is FAILED, reason from processing pipeline */
   processing_error?: string
+  /** Patient display ID e.g. P0001 (from API) */
+  patient_id_number?: string
+  /** Patient full name (from API) */
+  patient_name?: string
 }
 
 // Public share link types
@@ -133,7 +137,7 @@ export interface ShareLinkCreateResponse {
   expires_at: string
 }
 
-// RAG Chat types (patient document Q&A)
+// AI chat types (patient assistant)
 export interface RAGChatTurn {
   role: 'user' | 'assistant'
   content: string
@@ -143,6 +147,9 @@ export interface RAGChatRequest {
   question: string
   top_k?: number
   chat_history?: RAGChatTurn[]
+  // Optional overrides for backend system prompt / knowledge base
+  system_prompt?: string
+  knowledge_base?: string
 }
 
 export interface RAGChatResponse {

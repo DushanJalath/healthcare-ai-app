@@ -70,6 +70,7 @@ class DocumentResponse(DocumentBase):
     
     # Additional computed fields
     patient_name: Optional[str] = None
+    patient_id_number: Optional[str] = None  # Display ID e.g. P0001
     clinic_name: Optional[str] = None
     has_extractions: Optional[bool] = False
     extraction_count: Optional[int] = 0

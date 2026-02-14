@@ -4,6 +4,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import Navbar from '@/components/layout/Navbar'
 import PatientForm from '@/components/patients/PatientForm'
 import { PatientDetailResponse, UserRole, Gender } from '@/types'
 import api from '@/utils/api'
@@ -41,10 +42,10 @@ export default function PatientDetailPage() {
       const status = error.response?.status
       if (status === 404) {
         toast.error('Patient not found')
-        router.push('/patients')
+        router.push('/clinic/users')
       } else if (status === 403) {
         toast.error('Access denied')
-        router.push('/patients')
+        router.push('/clinic/users')
       } else {
         toast.error(error.response?.data?.detail || 'Failed to load patient')
       }
@@ -114,7 +115,7 @@ export default function PatientDetailPage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
       </ProtectedRoute>
@@ -124,11 +125,11 @@ export default function PatientDetailPage() {
   if (!patient) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900">Patient Not Found</h2>
             <p className="text-gray-600 mt-2">The requested patient could not be found.</p>
-            <Link href="/patients" className="text-blue-600 hover:text-blue-800 mt-4 inline-block">
+            <Link href="/clinic/users" className="text-blue-600 hover:text-blue-800 mt-4 inline-block">
               Back to Patients
             </Link>
           </div>
@@ -144,51 +145,34 @@ export default function PatientDetailPage() {
       </Head>
       
       <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="bg-white shadow">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-6">
-              <div>
-                <nav className="mb-2">
-                  <Link href="/patients" className="text-blue-600 hover:text-blue-800">
-                    ← Back to Patients
-                  </Link>
-                </nav>
-                <h1 className="text-3xl font-bold text-gray-900">
-                  Patient: {patient.patient_id}
-                </h1>
-                <p className="mt-2 text-gray-600">
-                  {patient.user_first_name && patient.user_last_name
-                    ? `${patient.user_first_name} ${patient.user_last_name}`
-                    : 'No user linked'}
-                </p>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                {isClinicUser && (
-                  <>
-                    {!editing && (
-                      <button
-                        onClick={() => setEditing(true)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                      >
-                        Edit Patient
-                      </button>
-                    )}
-                    <Link
-                      href={`/patients/${patient.id}/documents`}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      View Documents ({patient.documents_count || 0})
-                    </Link>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
+        <Navbar
+          title={`Patient: ${patient.patient_id}`}
+          subtitle={patient.user_first_name || patient.user_last_name ? `${patient.user_first_name || ''} ${patient.user_last_name || ''}`.trim() : 'View and manage patient record'}
+        />
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <Link href="/clinic/users" className="text-blue-600 hover:text-blue-800">
+              ← Back to Patients
+            </Link>
+            {isClinicUser && (
+              <div className="flex items-center space-x-2">
+                {!editing && (
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  >
+                    Edit Patient
+                  </button>
+                )}
+                <Link
+                  href={`/patients/${patient.id}/documents`}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  View Documents ({patient.documents_count || 0})
+                </Link>
+              </div>
+            )}
+          </div>
           {editing && isClinicUser ? (
             /* Edit Form */
             <div className="bg-white shadow rounded-lg p-6">

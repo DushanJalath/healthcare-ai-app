@@ -4,6 +4,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import Navbar from '@/components/layout/Navbar'
 import DocumentList from '@/components/documents/DocumentList'
 import DocumentUpload from '@/components/documents/DocumentUpload'
 import { Patient, UserRole } from '@/types'
@@ -32,7 +33,7 @@ export default function PatientDocumentsPage() {
         setPatient(response.data)
       } catch (error) {
         toast.error('Failed to load patient information')
-        router.push('/patients')
+        router.push('/clinic/users')
       } finally {
         setLoading(false)
       }
@@ -52,7 +53,7 @@ export default function PatientDocumentsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     )
@@ -60,11 +61,11 @@ export default function PatientDocumentsPage() {
 
   if (!patient) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900">Patient Not Found</h2>
           <p className="text-gray-600 mt-2">The requested patient could not be found.</p>
-          <Link href="/patients" className="text-blue-600 hover:text-blue-800 mt-4 inline-block">
+          <Link href="/clinic/users" className="text-blue-600 hover:text-blue-800 mt-4 inline-block">
             Back to Patients
           </Link>
         </div>
@@ -72,18 +73,24 @@ export default function PatientDocumentsPage() {
     )
   }
 
+  const patientName = [((patient as { user_first_name?: string }).user_first_name), ((patient as { user_last_name?: string }).user_last_name)].filter(Boolean).join(' ') || patient.patient_id
+
   return (
     <ProtectedRoute>
       <Head>
-        <title>Documents - {patient.patient_id} - MediKeep</title>
+        <title>Documents - MediKeep</title>
       </Head>
       
       <div className="min-h-screen bg-gray-50">
+        <Navbar
+          title="Documents"
+          subtitle={`Manage documents for ${patientName}`}
+        />
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           {/* Patient Header */}
           <div className="mb-8">
             <nav className="mb-4">
-              <Link href="/patients" className="text-blue-600 hover:text-blue-800">
+              <Link href="/clinic/users" className="text-blue-600 hover:text-blue-800">
                 ← Back to Patients
               </Link>
             </nav>

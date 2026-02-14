@@ -5,6 +5,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import Navbar from '@/components/layout/Navbar'
+import PatientForm from '@/components/patients/PatientForm'
 import { PatientDetailResponse, UserRole, Gender } from '@/types'
 import api from '@/utils/api'
 import toast, { Toaster } from 'react-hot-toast'
@@ -15,6 +16,7 @@ export default function ClinicPatientsPage() {
   const [patients, setPatients] = useState<PatientDetailResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [editingPatient, setEditingPatient] = useState<PatientDetailResponse | null>(null)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Fetch patients function
@@ -99,6 +101,35 @@ export default function ClinicPatientsPage() {
 
   const handleViewDocuments = (patientId: number) => {
     router.push(`/patients/${patientId}/documents`)
+  }
+
+  const handleUpdatePatient = async (patientData: any) => {
+    if (!editingPatient) return
+    try {
+      await api.put(`/patients/${editingPatient.id}`, patientData, {
+        headers: { Authorization: `Bearer ${session?.accessToken}` }
+      })
+      toast.success('Patient updated successfully!')
+      setEditingPatient(null)
+      fetchPatients(searchQuery)
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to update patient')
+    }
+  }
+
+  const handleDeletePatient = async (patientId: number) => {
+    if (!confirm('Are you sure you want to delete this patient? This action cannot be undone.')) {
+      return
+    }
+    try {
+      await api.delete(`/patients/${patientId}`, {
+        headers: { Authorization: `Bearer ${session?.accessToken}` }
+      })
+      toast.success('Patient deleted successfully!')
+      fetchPatients(searchQuery)
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to delete patient')
+    }
   }
 
   if (loading && patients.length === 0) {
@@ -223,6 +254,11 @@ export default function ClinicPatientsPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-900">{patient.phone || 'N/A'}</div>
+                          {patient.user_email && (
+                            <div className="text-sm text-gray-600 truncate max-w-xs" title={patient.user_email}>
+                              {patient.user_email}
+                            </div>
+                          )}
                           {patient.address && (
                             <div className="text-sm text-gray-500 truncate max-w-xs" title={patient.address}>
                               {patient.address}
@@ -240,21 +276,59 @@ export default function ClinicPatientsPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                           <button
                             onClick={() => handleViewPatient(patient.id)}
-                            className="text-medical-600 hover:text-medical-900"
+                            className="text-blue-600 hover:text-blue-900"
                           >
                             View
                           </button>
                           <button
+                            onClick={() => setEditingPatient(patient)}
+                            className="text-purple-600 hover:text-purple-900"
+                          >
+                            Edit
+                          </button>
+                          <button
                             onClick={() => handleViewDocuments(patient.id)}
-                            className="text-tech-600 hover:text-tech-900"
+                            className="text-purple-600 hover:text-purple-900"
                           >
                             Documents
+                          </button>
+                          <button
+                            onClick={() => handleDeletePatient(patient.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
                           </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Patient Modal */}
+          {editingPatient && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+              <div className="relative top-8 mx-auto max-w-4xl bg-white rounded-lg shadow-lg">
+                <div className="p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      Edit Patient: {editingPatient.patient_id}
+                    </h2>
+                    <button
+                      onClick={() => setEditingPatient(null)}
+                      className="text-gray-400 hover:text-gray-600 text-2xl"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <PatientForm
+                    patient={editingPatient}
+                    onSubmit={handleUpdatePatient}
+                    onCancel={() => setEditingPatient(null)}
+                  />
+                </div>
               </div>
             </div>
           )}

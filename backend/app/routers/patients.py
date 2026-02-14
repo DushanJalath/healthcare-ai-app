@@ -1,15 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, desc
-from typing import List, Optional
+from typing import List, Optional, Literal, Dict, Any
 from datetime import datetime, timedelta, date
+from pydantic import BaseModel
+import os
+
+from openai import OpenAI
 
 from ..database import get_db
 from ..models.patient import Patient, Gender
 from ..models.user import User, UserRole
 from ..models.clinic import Clinic
 from ..models.patient_clinic import PatientClinic
-from ..models.document import Document
+from ..models.document import Document, DocumentStatus
+from ..models.extraction import Extraction, ExtractionStatus
 from ..schemas.patient import (
     PatientCreate, PatientUpdate, PatientResponse, PatientDetailResponse,
     PatientListResponse, PatientSearchRequest, PatientStatsResponse
@@ -20,6 +25,296 @@ from ..utils.password import generate_secure_password
 from ..utils.email import send_patient_welcome_email
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+# ---------------------------------------------------------------------------
+# AI Assistant (replaces legacy RAG-style endpoint)
+# ---------------------------------------------------------------------------
+
+DEFAULT_SYSTEM_PROMPT = (
+    "You are MediKeep Assistant, a helpful and friendly AI assistant for patients.\n"
+    "You help patients understand their medical documents and health information "
+    "in clear, simple language.\n\n"
+    "PERSONALIZATION:\n"
+    "- Address the patient by their first name when appropriate to create a warm, personal connection.\n"
+    "- When they greet you (e.g., 'Hi', 'Hello'), respond warmly using their name.\n"
+    "- Be conversational and empathetic, as you're helping them with their health information.\n\n"
+    "IMPORTANT MEDICAL DISCLAIMER:\n"
+    "- You are NOT a doctor and do not provide diagnoses or treatment decisions.\n"
+    "- Always remind users to consult their healthcare provider for medical advice.\n"
+    "- Be concise, friendly, and focus on explaining concepts clearly.\n"
+)
+
+DEFAULT_KNOWLEDGE_BASE = (
+    "MediKeep is a secure medical document management platform. Patients can:\n"
+    "- Store, organize, and view their medical documents (lab reports, prescriptions, imaging, etc.).\n"
+    "- See a timeline of uploads and related activity.\n"
+    "- Share selected documents with healthcare providers through time-limited links.\n"
+    "The assistant can answer general health questions and help interpret common "
+    "medical document terms, but it does not see raw medical records content unless "
+    "that content is included in the user's question or follow-up messages.\n"
+)
+
+
+class RAGChatTurnModel(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class RAGChatRequestModel(BaseModel):
+    question: str
+    top_k: Optional[int] = None
+    chat_history: List[RAGChatTurnModel] = []
+    # Optional: allow callers to override system prompt / KB for advanced use-cases
+    system_prompt: Optional[str] = None
+    knowledge_base: Optional[str] = None
+
+
+class RAGChatChunkModel(BaseModel):
+    content: str
+    metadata: Dict[str, Any] = {}
+
+
+class RAGChatResponseModel(BaseModel):
+    answer: str
+    chunks: List[RAGChatChunkModel] = []
+    used_top_k: int = 0
+
+
+def _build_patient_knowledge_base(patient_id: int, db: Session) -> str:
+    """
+    Build patient-specific knowledge base from patient personal data and extracted document texts.
+    
+    Returns a formatted string containing:
+    1. Patient personal information (name, demographics, etc.)
+    2. All extracted text from patient's documents, sorted by date (newest first)
+    
+    This allows the AI to personalize responses and understand temporal context.
+    """
+    # Get patient information
+    patient = db.query(Patient).options(
+        joinedload(Patient.user)
+    ).filter(Patient.id == patient_id).first()
+    
+    if not patient:
+        return ""
+    
+    # Build patient profile section
+    knowledge_parts = [
+        "PATIENT PROFILE:",
+        "=" * 70,
+        ""
+    ]
+    
+    # Add patient name
+    if patient.user:
+        first_name = patient.user.first_name or ""
+        last_name = patient.user.last_name or ""
+        full_name = f"{first_name} {last_name}".strip()
+        if full_name:
+            knowledge_parts.append(f"Patient Name: {full_name}")
+            knowledge_parts.append(f"First Name: {first_name}")
+    
+    # Add patient ID
+    if patient.patient_id:
+        knowledge_parts.append(f"Patient ID: {patient.patient_id}")
+    
+    # Add demographics
+    if patient.date_of_birth:
+        dob_str = patient.date_of_birth.strftime("%B %d, %Y")
+        knowledge_parts.append(f"Date of Birth: {dob_str}")
+        
+        # Calculate age
+        today = date.today()
+        age = today.year - patient.date_of_birth.year
+        if patient.date_of_birth.month > today.month or \
+           (patient.date_of_birth.month == today.month and patient.date_of_birth.day > today.day):
+            age -= 1
+        knowledge_parts.append(f"Age: {age} years old")
+    
+    if patient.gender:
+        knowledge_parts.append(f"Gender: {patient.gender.value}")
+    
+    # Add contact information (if available)
+    if patient.phone:
+        knowledge_parts.append(f"Phone: {patient.phone}")
+    
+    if patient.user and patient.user.email:
+        knowledge_parts.append(f"Email: {patient.user.email}")
+    
+    if patient.address:
+        knowledge_parts.append(f"Address: {patient.address}")
+    
+    # Add medical information
+    if patient.allergies:
+        knowledge_parts.append(f"Known Allergies: {patient.allergies}")
+    
+    if patient.medical_history:
+        knowledge_parts.append(f"Medical History: {patient.medical_history}")
+    
+    if patient.current_medications:
+        knowledge_parts.append(f"Current Medications: {patient.current_medications}")
+    
+    # Add emergency contact
+    if patient.emergency_contact_name:
+        knowledge_parts.append(f"Emergency Contact: {patient.emergency_contact_name}")
+        if patient.emergency_contact_phone:
+            knowledge_parts.append(f"Emergency Contact Phone: {patient.emergency_contact_phone}")
+    
+    knowledge_parts.append("")
+    knowledge_parts.append("NOTE: This is the patient you are currently speaking with. Address them by their first name " +
+                          "to personalize the conversation and make them feel comfortable.")
+    knowledge_parts.append("")
+    knowledge_parts.append("=" * 70)
+    knowledge_parts.append("")
+    
+    # Query all completed extractions for this patient, joined with document info
+    # Sort by document upload_date DESC to prioritize recent documents
+    extractions_query = (
+        db.query(Extraction, Document)
+        .join(Document, Extraction.document_id == Document.id)
+        .filter(
+            Extraction.patient_id == patient_id,
+            Extraction.status == ExtractionStatus.COMPLETED,
+            Extraction.raw_text.isnot(None),
+            Extraction.raw_text != ""
+        )
+        .order_by(desc(Document.upload_date))
+        .all()
+    )
+    
+    if not extractions_query:
+        # If no documents, still return patient profile
+        knowledge_parts.append("No medical documents have been uploaded yet.")
+        return "\n".join(knowledge_parts)
+    
+    # Add documents section
+    knowledge_parts.append("PATIENT'S MEDICAL DOCUMENTS (sorted by date, newest first):")
+    knowledge_parts.append("=" * 70)
+    knowledge_parts.append("")
+    knowledge_parts.append("IMPORTANT: When answering questions about time-sensitive data (like lab values, "
+                          "sugar levels, blood pressure, etc.), always prioritize the MOST RECENT document dates. "
+                          "If asked about 'latest' or 'current' values, use data from the newest documents.")
+    knowledge_parts.append("")
+    
+    for idx, (extraction, document) in enumerate(extractions_query, 1):
+        # Format document metadata
+        doc_date = document.upload_date.strftime("%B %d, %Y") if document.upload_date else "Unknown date"
+        doc_type = document.document_type.value if document.document_type else "Unknown type"
+        doc_name = document.original_filename or f"Document {document.id}"
+        
+        # Add document header
+        knowledge_parts.append(f"--- Document {idx} ---")
+        knowledge_parts.append(f"Date: {doc_date}")
+        knowledge_parts.append(f"Type: {doc_type}")
+        knowledge_parts.append(f"Filename: {doc_name}")
+        knowledge_parts.append("")
+        
+        # Add extracted text
+        text = extraction.raw_text.strip()
+        # Truncate very long documents to avoid token limits (keep first 2000 chars per doc)
+        if len(text) > 2000:
+            text = text[:2000] + "\n... (document continues)"
+        knowledge_parts.append(text)
+        knowledge_parts.append("")
+        knowledge_parts.append("-" * 70)
+        knowledge_parts.append("")
+    
+    knowledge_parts.append(f"Total documents: {len(extractions_query)}")
+    knowledge_parts.append("")
+    
+    return "\n".join(knowledge_parts)
+
+
+@router.post("/{patient_id}/rag/chat", response_model=RAGChatResponseModel)
+async def patient_ai_chat(
+    patient_id: int,
+    body: RAGChatRequestModel,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Patient-specific AI assistant chat endpoint.
+
+    This endpoint:
+    - Fetches all extracted text from patient's documents (sorted by date, newest first)
+    - Builds a date-aware knowledge base that prioritizes recent data
+    - Sends the system prompt, patient-specific knowledge base, chat history, 
+      and current question to OpenAI
+    - Returns the model's answer in a chat-friendly format
+    
+    The knowledge base includes document dates to help the AI understand temporal 
+    context (e.g., latest sugar levels vs older readings).
+    """
+    # Reuse existing permission checks to ensure the caller can access this patient
+    _ = _get_patient_detail(patient_id, db, current_user)
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AI assistant is not configured. Please set OPENAI_API_KEY.",
+        )
+
+    client = OpenAI(api_key=openai_api_key)
+
+    # Build patient-specific knowledge base from extracted documents
+    patient_knowledge = _build_patient_knowledge_base(patient_id, db)
+
+    # Build system prompt + knowledge base
+    system_prompt = DEFAULT_SYSTEM_PROMPT
+    if body.system_prompt:
+        system_prompt += "\n\nAdditional instructions:\n" + body.system_prompt.strip()
+
+    knowledge_base = DEFAULT_KNOWLEDGE_BASE
+    if body.knowledge_base:
+        knowledge_base += "\n\nCustom knowledge:\n" + body.knowledge_base.strip()
+    
+    # Add patient-specific document knowledge
+    if patient_knowledge:
+        knowledge_base += "\n\n" + patient_knowledge
+
+    system_message = (
+        system_prompt
+        + "\n\n-----\n"
+        + "INTERNAL KNOWLEDGE BASE (do not list verbatim unless useful):\n"
+        + knowledge_base
+    )
+
+    messages: List[Dict[str, str]] = [
+        {"role": "system", "content": system_message}
+    ]
+
+    # Add prior chat history for context
+    for turn in body.chat_history or []:
+        if turn.content and turn.role in ("user", "assistant"):
+            messages.append({"role": turn.role, "content": turn.content})
+
+    # Current user question goes last
+    messages.append({"role": "user", "content": body.question})
+
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.2,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI assistant request failed: {str(e)}",
+        )
+
+    answer = completion.choices[0].message.content if completion.choices else ""
+    if not answer:
+        answer = "I'm sorry, I couldn't generate a helpful answer. Please try asking in a different way."
+
+    # For compatibility with existing frontend types, return chunks/used_top_k
+    return RAGChatResponseModel(
+        answer=answer,
+        chunks=[],
+        used_top_k=0,
+    )
 
 
 def _get_next_patient_id_for_clinic(clinic_id: int, db: Session) -> str:

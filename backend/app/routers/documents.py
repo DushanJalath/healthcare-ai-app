@@ -51,7 +51,7 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_clinic_access)
 ):
-    """Upload a new document. Document is saved and Gemini Vision OCR is run in the background; extracted text is stored in the database. Requires GEMINI_API_KEY."""
+    """Upload a new document. Document is saved and OpenAI Vision OCR is run in the background; extracted text is stored in the database. Requires OPENAI_API_KEY."""
     
     # Save file to storage
     try:
@@ -119,20 +119,20 @@ async def upload_document(
     db.commit()
     db.refresh(document)
 
-    # Create extraction record and run OCR in background (Gemini Vision only)
+    # Create extraction record and run OCR in background (OpenAI Vision)
     extraction = Extraction(
         document_id=document.id,
         patient_id=document.patient_id,
         extraction_type=ExtractionType.GENERAL,
         status=ExtractionStatus.PENDING,
-        extraction_method="GEMINI_OCR",
+        extraction_method="OPENAI_OCR",
     )
     db.add(extraction)
     document.status = DocumentStatus.PROCESSING
     db.commit()
     db.refresh(extraction)
 
-    background_tasks.add_task(process_document_ocr, document.id, extraction.id)
+    background_tasks.add_task(process_document_ocr, document.id, extraction.id, use_openai=True)
 
     return DocumentUploadResponse(
         message="Document uploaded successfully",
@@ -150,7 +150,7 @@ async def run_document_ocr(
 ):
     """
     Trigger OCR for a document and store the extracted text in `extractions.raw_text`.
-    Uses Gemini Vision OCR only (requires GEMINI_API_KEY).
+    Uses OpenAI Vision OCR (requires OPENAI_API_KEY).
     """
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
@@ -165,7 +165,7 @@ async def run_document_ocr(
         patient_id=document.patient_id,
         extraction_type=ExtractionType.GENERAL,
         status=ExtractionStatus.PENDING,
-        extraction_method="GEMINI_OCR",
+        extraction_method="OPENAI_OCR",
     )
 
     document.status = DocumentStatus.PROCESSING
@@ -173,7 +173,7 @@ async def run_document_ocr(
     db.commit()
     db.refresh(extraction)
 
-    background_tasks.add_task(process_document_ocr, document.id, extraction.id)
+    background_tasks.add_task(process_document_ocr, document.id, extraction.id, use_openai=True)
 
     return {
         "message": "OCR started",
@@ -225,9 +225,16 @@ async def get_documents(
     # Get total count
     total = query.count()
     
-    # Apply pagination
+    # Apply pagination and eager-load patient (and user) for list display
     offset = (page - 1) * per_page
-    documents = query.offset(offset).limit(per_page).all()
+    documents = (
+        query.options(
+            joinedload(Document.patient).joinedload(Patient.user)
+        )
+        .offset(offset)
+        .limit(per_page)
+        .all()
+    )
     doc_ids = [d.id for d in documents]
 
     # Load latest extraction error for failed documents (for processing_error in UI)
@@ -254,12 +261,25 @@ async def get_documents(
             else:
                 doc.processing_error = None
 
+    # Build response with patient display info
+    def _doc_to_response(doc):
+        resp = DocumentResponse.from_orm(doc)
+        data = resp.model_dump() if hasattr(resp, "model_dump") else resp.dict()
+        if getattr(doc, "patient", None):
+            data["patient_id_number"] = doc.patient.patient_id
+            if doc.patient.user:
+                parts = [doc.patient.user.first_name or "", doc.patient.user.last_name or ""]
+                data["patient_name"] = " ".join(x for x in parts if x).strip() or doc.patient.patient_id
+            else:
+                data["patient_name"] = doc.patient.patient_id
+        return DocumentResponse(**data)
+
     # Calculate pagination flags
     has_next = (page * per_page) < total
     has_previous = page > 1
 
     return DocumentListResponse(
-        documents=[DocumentResponse.from_orm(doc) for doc in documents],
+        documents=[_doc_to_response(doc) for doc in documents],
         total=total,
         page=page,
         per_page=per_page,
@@ -403,6 +423,66 @@ async def download_document(
         filename=document.original_filename,
         media_type=document.mime_type
     )
+
+@router.get("/{document_id}/extracted-text")
+async def get_extracted_text(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get extracted text from document OCR."""
+    document = db.query(Document).filter(Document.id == document_id).first()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Check permissions (same logic as get_document)
+    if current_user.role == UserRole.PATIENT:
+        patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+        if not patient or document.patient_id != patient.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    elif current_user.role in [UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]:
+        # Check clinic permission
+        if current_user.clinic_id and document.clinic_id != current_user.clinic_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get the latest completed extraction for this document
+    extraction = db.query(Extraction).filter(
+        Extraction.document_id == document_id,
+        Extraction.status == ExtractionStatus.COMPLETED
+    ).order_by(desc(Extraction.completed_at)).first()
+    
+    if not extraction or not extraction.raw_text:
+        # Check if extraction is still in progress
+        pending_extraction = db.query(Extraction).filter(
+            Extraction.document_id == document_id,
+            Extraction.status.in_([ExtractionStatus.PENDING, ExtractionStatus.IN_PROGRESS])
+        ).first()
+        
+        if pending_extraction:
+            return {
+                "document_id": document_id,
+                "status": "processing",
+                "message": "Text extraction is still in progress. Please try again later.",
+                "extracted_text": None
+            }
+        
+        return {
+            "document_id": document_id,
+            "status": "not_available",
+            "message": "No extracted text available for this document.",
+            "extracted_text": None
+        }
+    
+    return {
+        "document_id": document_id,
+        "status": "completed",
+        "extracted_text": extraction.raw_text,
+        "extraction_method": extraction.extraction_method,
+        "extraction_date": extraction.completed_at,
+        "processing_time": extraction.processing_time_seconds
+    }
 
 @router.put("/{document_id}/assign", response_model=DocumentResponse)
 async def assign_document_to_patient(

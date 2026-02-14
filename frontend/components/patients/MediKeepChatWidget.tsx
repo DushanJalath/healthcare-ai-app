@@ -67,7 +67,10 @@ export default function MediKeepChatWidget({
       const chatHistory: RAGChatTurn[] = [...messages, userTurn]
       const response = await sendRAGChat(
         patientId,
-        { question: text, chat_history: messages },
+        {
+          question: text,
+          chat_history: chatHistory,
+        },
         accessToken
       )
       setMessages((prev) => [

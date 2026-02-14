@@ -63,6 +63,12 @@ export default function PatientDocuments() {
     }
   }
 
+  const [viewingText, setViewingText] = useState<{
+    documentId: number;
+    text: string;
+    status: string;
+  } | null>(null)
+
   const handleDownload = async (document: Document) => {
     try {
       const response = await api.get(`/documents/${document.id}/download`, {
@@ -82,6 +88,32 @@ export default function PatientDocuments() {
       toast.success('Document downloaded successfully')
     } catch (error) {
       toast.error('Failed to download document')
+    }
+  }
+
+  const handleViewText = async (document: Document) => {
+    try {
+      const response = await api.get(`/documents/${document.id}/extracted-text`, {
+        headers: { Authorization: `Bearer ${session?.accessToken}` }
+      })
+
+      if (response.data.status === 'processing') {
+        toast.info('Text extraction is still in progress. Please try again later.')
+        return
+      }
+
+      if (response.data.status === 'not_available') {
+        toast.error('No extracted text available for this document.')
+        return
+      }
+
+      setViewingText({
+        documentId: document.id,
+        text: response.data.extracted_text,
+        status: response.data.status
+      })
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to retrieve extracted text')
     }
   }
 
@@ -226,6 +258,14 @@ export default function PatientDocuments() {
                     >
                       Download
                     </button>
+                    {document.status === DocumentStatus.PROCESSED && (
+                      <button
+                        onClick={() => handleViewText(document)}
+                        className="text-green-600 hover:text-green-800 text-sm font-medium"
+                      >
+                        View Text
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -233,6 +273,62 @@ export default function PatientDocuments() {
           </div>
         )}
       </div>
+
+      {/* Extracted Text Modal */}
+      {viewingText && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div 
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={() => setViewingText(null)}
+            ></div>
+
+            {/* Modal panel */}
+            <div className="inline-block w-full max-w-4xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Extracted Text
+                </h3>
+                <button
+                  onClick={() => setViewingText(null)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mt-4 max-h-96 overflow-y-auto">
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <pre className="whitespace-pre-wrap text-sm text-gray-800 font-mono">
+                    {viewingText.text}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(viewingText.text)
+                    toast.success('Text copied to clipboard')
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                >
+                  Copy to Clipboard
+                </button>
+                <button
+                  onClick={() => setViewingText(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

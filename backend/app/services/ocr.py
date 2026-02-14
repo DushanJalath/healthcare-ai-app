@@ -7,6 +7,7 @@ from typing import Optional
 
 from .google_ocr import extract_text_google_bytes, GoogleOcrError
 from .gemini_ocr import extract_text_gemini, GeminiOcrError
+from .openai_ocr import extract_text_openai, OpenAIOcrError
 from .pdf_pages import pdf_to_pil_pages
 
 
@@ -59,16 +60,21 @@ def extract_text(
     mime_type: Optional[str] = None,
     *,
     use_google: bool = False,
-    use_gemini: bool = True,
+    use_gemini: bool = False,
+    use_openai: bool = True,
 ) -> str:
     """
-    OCR using Gemini Vision only (use_gemini=True). Google Vision and other engines are disabled.
-    Requires GEMINI_API_KEY in environment.
+    OCR using OpenAI Vision by default (use_openai=True). 
+    Requires OPENAI_API_KEY in environment.
+    Legacy support for Gemini Vision (use_gemini=True) and Google Vision (use_google=True).
     """
+    if use_openai:
+        return extract_text_openai(file_path, mime_type)
+    
     if use_gemini:
         return extract_text_gemini(file_path, mime_type)
 
-    # Legacy paths (not used when app uses Gemini-only)
+    # Legacy paths (not used when app uses OpenAI-only)
     if use_google:
         if _is_pdf(mime_type, file_path):
             return extract_text_from_pdf_google(file_path)

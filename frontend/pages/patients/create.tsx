@@ -33,7 +33,7 @@ export default function CreatePatientPage() {
             if (response.data?.id) {
                 router.push(`/patients/${response.data.id}`)
             } else {
-                router.push('/patients')
+                router.push('/clinic/users')
             }
         } catch (error: any) {
             // Handle validation errors from FastAPI
@@ -73,7 +73,7 @@ export default function CreatePatientPage() {
                 <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                     <div className="mb-6">
                         <Link
-                            href="/patients"
+                            href="/clinic/users"
                             className="text-blue-600 hover:text-blue-800 inline-flex items-center"
                         >
                             ← Back to Patients
@@ -83,7 +83,7 @@ export default function CreatePatientPage() {
                     <div className="bg-white shadow rounded-lg p-6">
                         <PatientForm
                             onSubmit={handleCreatePatient}
-                            onCancel={() => router.push('/patients')}
+                            onCancel={() => router.push('/clinic/users')}
                             loading={loading}
                         />
                     </div>

@@ -4,8 +4,8 @@ import type { RAGChatRequest, RAGChatResponse } from '@/types'
 const RAG_TOP_K = 6
 
 /**
- * Send a question to the patient RAG chat endpoint.
- * Uses the patient's indexed documents (vector store) to answer.
+ * Send a question to the patient AI chat endpoint.
+ * Uses a custom knowledge base + chat history with OpenAI.
  * Requires the logged-in user to be the patient or have clinic access to that patient.
  */
 export async function sendRAGChat(

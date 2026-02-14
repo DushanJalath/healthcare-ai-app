@@ -142,8 +142,7 @@ cerberus
 # Rate limiting
 slowapi
 
-# CORS handling (already included in FastAPI but explicit)
-python-cors
+# CORS: use FastAPI's built-in fastapi.middleware.cors.CORSMiddleware (no extra package)
 
 # Webhook handling
 pyngrok
@@ -166,8 +165,7 @@ fhirclient
 transformers
 torch
 
-# Database connection pooling
-sqlalchemy-pool
+# Connection pooling: use SQLAlchemy's built-in create_engine(..., pool_pre_ping=True) (no extra package)
 
 # Async database adapter
 asyncpg
@@ -179,7 +177,7 @@ apscheduler
 prometheus-client
 
 # Logging formatters
-pythonjsonlogger
+python-json-logger
 
 # Security headers
 secure
@@ -214,8 +212,7 @@ websockets
 # File compression
 py7zr
 
-# System information
-platform
+# System information: use Python's built-in 'import platform' (no pip package)
 
 # Unicode handling
 unidecode

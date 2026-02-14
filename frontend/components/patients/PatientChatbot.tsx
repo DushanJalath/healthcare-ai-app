@@ -43,7 +43,7 @@ export default function PatientChatbot({
         patientId,
         {
           question,
-          chat_history: messages,
+          chat_history: chatHistory,
         },
         accessToken
       )

@@ -18,11 +18,13 @@ def process_document_ocr(
     extraction_id: int,
     *,
     use_google: bool = False,
-    use_gemini: bool = True,
+    use_gemini: bool = False,
+    use_openai: bool = True,
 ) -> None:
     """
-    Background task: run OCR on a stored document using Gemini Vision only.
-    Requires GEMINI_API_KEY in environment. Stores text in Extraction.raw_text and updates Document.status.
+    Background task: run OCR on a stored document using OpenAI Vision by default.
+    Requires OPENAI_API_KEY in environment. Stores text in Extraction.raw_text and updates Document.status.
+    Legacy support for Gemini Vision (use_gemini=True, requires GEMINI_API_KEY).
     """
     db = SessionLocal()
     start = time.time()
@@ -33,20 +35,26 @@ def process_document_ocr(
         if not document or not extraction:
             return
 
-        if not (os.getenv("GEMINI_API_KEY") or "").strip():
+        # Check for required API key based on selected OCR engine
+        if use_openai and not (os.getenv("OPENAI_API_KEY") or "").strip():
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set. Add it to backend/.env to use OpenAI Vision OCR."
+            )
+        elif use_gemini and not (os.getenv("GEMINI_API_KEY") or "").strip():
             raise RuntimeError(
                 "GEMINI_API_KEY is not set. Add it to backend/.env to use Gemini Vision OCR."
             )
 
         extraction.status = ExtractionStatus.IN_PROGRESS
-        extraction.extraction_method = "GEMINI_OCR"
+        extraction.extraction_method = "OPENAI_OCR" if use_openai else "GEMINI_OCR" if use_gemini else "GOOGLE_OCR"
         db.commit()
 
         text = extract_text(
             document.file_path,
             document.mime_type,
-            use_google=False,
-            use_gemini=True,
+            use_google=use_google,
+            use_gemini=use_gemini,
+            use_openai=use_openai,
         )
 
         extraction.raw_text = text
@@ -71,10 +79,10 @@ def process_document_ocr(
         )
     except Exception as e:
         err_msg = str(e)
-        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "rate_limit" in err_msg.lower():
             logger.warning(
-                "OCR failed (Gemini quota/rate limit): document_id=%s extraction_id=%s. "
-                "Free tier limit exceeded for gemini-2.0-flash. Wait and retry, or check billing: https://ai.google.dev/gemini-api/docs/rate-limits",
+                "OCR failed (API quota/rate limit): document_id=%s extraction_id=%s. "
+                "Rate limit exceeded. Wait and retry, or check your API billing.",
                 document_id,
                 extraction_id,
             )

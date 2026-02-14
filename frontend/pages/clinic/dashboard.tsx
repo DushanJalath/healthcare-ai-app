@@ -69,7 +69,7 @@ export default function ClinicDashboard() {
   if (loading) {
     return (
       <ProtectedRoute allowedRoles={[UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]}>
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
       </ProtectedRoute>
@@ -108,6 +108,15 @@ export default function ClinicDashboard() {
                     <div className="text-sm text-gray-600">Register new patient</div>
                   </button>
 
+                  <Link
+                    href="/clinic/users"
+                    className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left block"
+                  >
+                    <div className="text-2xl mb-2">🏥</div>
+                    <div className="font-medium">All Patients</div>
+                    <div className="text-sm text-gray-600">View all clinic patients</div>
+                  </Link>
+
                   <button
                     onClick={() => handleQuickAction('upload_documents')}
                     className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left"
@@ -118,15 +127,6 @@ export default function ClinicDashboard() {
                   </button>
 
                   <Link
-                    href="/patients"
-                    className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left block"
-                  >
-                    <div className="text-2xl mb-2">📋</div>
-                    <div className="font-medium">View Patients</div>
-                    <div className="text-sm text-gray-600">Manage patient records</div>
-                  </Link>
-
-                  <Link
                     href="/documents"
                     className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left block"
                   >
@@ -134,20 +134,8 @@ export default function ClinicDashboard() {
                     <div className="font-medium">Manage Documents</div>
                     <div className="text-sm text-gray-600">View and organize files</div>
                   </Link>
-                </div>
-              </div>
 
-              {/* Additional Actions */}
-              <div className="mb-8">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <Link
-                    href="/clinic/users"
-                    className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left block"
-                  >
-                    <div className="text-2xl mb-2">🏥</div>
-                    <div className="font-medium">All Patients</div>
-                    <div className="text-sm text-gray-600">View all clinic patients</div>
-                  </Link>
+                  
                 </div>
               </div>
 
@@ -188,13 +176,13 @@ export default function ClinicDashboard() {
                     Patient Demographics
                   </h3>
 
-                  {stats.patient_demographics.gender_distribution && (
+                  {stats.patient_demographics?.gender_distribution && Object.keys(stats.patient_demographics.gender_distribution).length > 0 && (
                     <div className="mb-4">
                       <h4 className="text-sm font-medium text-gray-700 mb-2">By Gender</h4>
                       <div className="space-y-2">
                         {Object.entries(stats.patient_demographics.gender_distribution).map(([gender, count]) => (
                           <div key={gender} className="flex justify-between">
-                            <span className="text-sm">{gender.replace('_', ' ')}</span>
+                            <span className="text-sm">{String(gender).replace('_', ' ')}</span>
                             <span className="text-sm font-medium">{count}</span>
                           </div>
                         ))}
@@ -202,7 +190,7 @@ export default function ClinicDashboard() {
                     </div>
                   )}
 
-                  {stats.patient_demographics.age_distribution && (
+                  {stats.patient_demographics?.age_distribution && Object.keys(stats.patient_demographics.age_distribution).length > 0 && (
                     <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-2">By Age Group</h4>
                       <div className="space-y-2">
@@ -214,6 +202,13 @@ export default function ClinicDashboard() {
                         ))}
                       </div>
                     </div>
+                  )}
+
+                  {(!stats.patient_demographics?.gender_distribution || Object.keys(stats.patient_demographics.gender_distribution).length === 0) &&
+                   (!stats.patient_demographics?.age_distribution || Object.keys(stats.patient_demographics.age_distribution).length === 0) && (
+                    <p className="text-sm text-gray-500">
+                      No demographic data yet. Enroll patients with your clinic to see breakdown by gender and age.
+                    </p>
                   )}
                 </div>
               </div>

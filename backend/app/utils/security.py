@@ -94,15 +94,39 @@ def validate_phone(phone: str) -> bool:
     # Check if it's numeric and reasonable length
     return phone_clean.isdigit() and 7 <= len(phone_clean) <= 15
 
-# File security
-def get_file_mime_type(file_path: str) -> str:
-    """Get actual MIME type using python-magic (if available)."""
-    if magic is None:
-        return "application/octet-stream"
+# File security - magic bytes for fallback when python-magic/libmagic unavailable (e.g. Windows)
+_MAGIC_SIGNATURES = [
+    (b"%PDF", "application/pdf"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+]
+
+
+def _get_file_mime_type_fallback(file_path: str) -> str:
+    """Detect MIME type by reading magic bytes when python-magic is not available."""
     try:
-        return magic.from_file(file_path, mime=True)
+        with open(file_path, "rb") as f:
+            header = f.read(12)
+        for signature, mime in _MAGIC_SIGNATURES:
+            if header.startswith(signature):
+                return mime
     except Exception:
-        return "application/octet-stream"
+        pass
+    return "application/octet-stream"
+
+
+def get_file_mime_type(file_path: str) -> str:
+    """Get actual MIME type using python-magic (if available), else magic-bytes fallback."""
+    if magic is not None:
+        try:
+            detected = magic.from_file(file_path, mime=True)
+            if detected and detected != "application/octet-stream":
+                return detected
+        except Exception:
+            pass
+    return _get_file_mime_type_fallback(file_path)
 
 def scan_file_content(file_path: str) -> Dict[str, Any]:
     """Basic file content scanning for security threats."""
