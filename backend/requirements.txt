@@ -35,6 +35,8 @@ google-genai
 
 # AI and machine learning
 openai
+pgvector
+tiktoken
 
 # File handling and utilities
 python-magic

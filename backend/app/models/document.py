@@ -41,3 +41,4 @@ class Document(Base):
     patient = relationship("Patient", back_populates="documents")
     clinic = relationship("Clinic", back_populates="documents")
     extractions = relationship("Extraction", back_populates="document")
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan", passive_deletes=True)

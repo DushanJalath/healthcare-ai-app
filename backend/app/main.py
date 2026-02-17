@@ -1,5 +1,15 @@
 from pathlib import Path
 import os
+import logging
+
+# Configure logging FIRST before any other imports
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Output to console/terminal
+    ]
+)
 
 # Load .env from backend directory so GEMINI_API_KEY and other vars are in os.environ
 # (Pydantic Settings only loads fields defined on Settings; other keys need dotenv)
@@ -21,6 +31,7 @@ from .routers.patient_dashboard import router as patient_dashboard_router
 from .routers.clinic import router as clinic_router
 from .routers.audit import router as audit_router
 from .routers.share import router as share_router
+from .routers.vector_management import router as vector_management_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -52,6 +63,16 @@ for dir_path in upload_dirs:
         print(f"  Please check permissions and ensure the path is accessible.")
         # Don't exit here, but log the error - the file_handler will handle it
 
+# Create vector database directory
+vector_db_path = backend_dir / "vector_db"
+try:
+    vector_db_path.mkdir(parents=True, exist_ok=True)
+    print(f"[OK] Created/verified vector database directory: {vector_db_path}")
+    # Set environment variable for vector store service
+    os.environ.setdefault("VECTOR_DB_PATH", str(vector_db_path))
+except (OSError, PermissionError) as e:
+    print(f"[ERROR] Could not create vector database directory {vector_db_path}: {e}")
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Healthcare AI API",
@@ -81,6 +102,7 @@ app.include_router(patient_dashboard_router)
 app.include_router(clinic_router)
 app.include_router(audit_router)
 app.include_router(share_router)
+app.include_router(vector_management_router)
 
 @app.get("/")
 async def root():

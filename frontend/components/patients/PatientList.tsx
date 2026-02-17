@@ -109,53 +109,53 @@ export default function PatientList({
 
   return (
     <div className="bg-white shadow rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                 onClick={() => handleSort('patient_id')}
               >
-                <div className="flex items-center">
+                <div className="flex items-center gap-1">
                   Patient ID
                   {sortField === 'patient_id' && (
-                    <span className="ml-1">
+                    <span className="text-blue-600">
                       {sortDirection === 'asc' ? '↑' : '↓'}
                     </span>
                   )}
                 </div>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Name
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Age
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Gender
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Phone
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Documents
               </th>
               <th
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                 onClick={() => handleSort('created_at')}
               >
-                <div className="flex items-center">
+                <div className="flex items-center gap-1">
                   Created
                   {sortField === 'created_at' && (
-                    <span className="ml-1">
+                    <span className="text-blue-600">
                       {sortDirection === 'asc' ? '↑' : '↓'}
                     </span>
                   )}
                 </div>
               </th>
               {showActions && (
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Actions
                 </th>
               )}
@@ -163,13 +163,13 @@ export default function PatientList({
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {sortedPatients.map((patient) => (
-              <tr key={patient.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
+              <tr key={patient.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-4 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">
                     {patient.patient_id}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-4 py-4">
                   <div>
                     <div className="text-sm font-medium text-gray-900">
                       {patient.user_first_name && patient.user_last_name
@@ -177,64 +177,66 @@ export default function PatientList({
                         : 'No user linked'}
                     </div>
                     {patient.user_email && (
-                      <div className="text-sm text-gray-500">
+                      <div className="text-xs text-gray-500 mt-1">
                         {patient.user_email}
                       </div>
                     )}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-4 py-4 text-sm text-gray-600">
                   {calculateAge(patient.date_of_birth)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-4 py-4 text-sm text-gray-600">
                   {formatGender(patient.gender)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-4 py-4 text-sm text-gray-600">
                   {patient.phone || 'Not provided'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-4 py-4">
                   <button
                     onClick={() => onViewDocuments?.(patient.id)}
-                    className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
                   >
                     {patient.documents_count || 0} docs
                   </button>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-4 py-4 text-sm text-gray-600 whitespace-nowrap">
                   {new Date(patient.created_at).toLocaleDateString()}
                 </td>
                 {showActions && (
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <Link
-                      href={`/patients/${patient.id}`}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      View
-                    </Link>
-                    {onEdit && (
-                      <button
-                        onClick={() => onEdit(patient)}
-                        className="text-green-600 hover:text-green-900"
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/patients/${patient.id}`}
+                        className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
                       >
-                        Edit
-                      </button>
-                    )}
-                    {onViewDocuments && (
-                      <button
-                        onClick={() => onViewDocuments(patient.id)}
-                        className="text-purple-600 hover:text-purple-900"
-                      >
-                        Documents
-                      </button>
-                    )}
-                    {onDelete && (
-                      <button
-                        onClick={() => onDelete(patient.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
-                    )}
+                        View
+                      </Link>
+                      {onEdit && (
+                        <button
+                          onClick={() => onEdit(patient)}
+                          className="text-green-600 hover:text-green-800 font-medium transition-colors"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {onViewDocuments && (
+                        <button
+                          onClick={() => onViewDocuments(patient.id)}
+                          className="text-purple-600 hover:text-purple-800 font-medium transition-colors"
+                        >
+                          Documents
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          onClick={() => onDelete(patient.id)}
+                          className="text-red-600 hover:text-red-800 font-medium transition-colors"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>

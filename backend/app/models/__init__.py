@@ -6,6 +6,7 @@ from .document import Document
 from .extraction import Extraction
 from .audit_log import AuditLog
 from .share_link import MedicalRecordShareLink
+from .document_chunk import DocumentChunk
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "Extraction",
     "AuditLog",
     "MedicalRecordShareLink",
+    "DocumentChunk",
 ]

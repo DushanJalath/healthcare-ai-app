@@ -25,6 +25,22 @@ a {
   }
 }
 
+/* Hide scrollbars but keep functionality */
+.overflow-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+.overflow-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Professional table styling */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
 /* Custom components */
 @layer components {
   .btn-primary {
@@ -45,5 +61,21 @@ a {
   
   .card {
     @apply bg-white p-6 rounded-xl shadow-md border border-gray-100;
+  }
+  
+  .table-professional {
+    @apply min-w-full divide-y divide-gray-200;
+  }
+  
+  .table-professional thead {
+    @apply bg-gray-50;
+  }
+  
+  .table-professional tbody {
+    @apply bg-white divide-y divide-gray-200;
+  }
+  
+  .table-professional tbody tr:hover {
+    @apply bg-gray-50 transition-colors;
   }
 }

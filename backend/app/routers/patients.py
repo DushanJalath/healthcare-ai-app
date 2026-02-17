@@ -23,6 +23,7 @@ from ..utils.deps import get_current_active_user, require_clinic_access
 from ..utils.auth import get_password_hash
 from ..utils.password import generate_secure_password
 from ..utils.email import send_patient_welcome_email
+from ..services.vector_store import get_vector_store
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -39,10 +40,24 @@ DEFAULT_SYSTEM_PROMPT = (
     "- Address the patient by their first name when appropriate to create a warm, personal connection.\n"
     "- When they greet you (e.g., 'Hi', 'Hello'), respond warmly using their name.\n"
     "- Be conversational and empathetic, as you're helping them with their health information.\n\n"
+    "ANSWERING QUESTIONS FROM DOCUMENTS:\n"
+    "- ALWAYS base your answers on the provided document excerpts in the knowledge base.\n"
+    "- Start your answers by explicitly referencing the documents, for example:\n"
+    "  * 'Based on your recent medical documents...'\n"
+    "  * 'According to your lab report from [date]...'\n"
+    "  * 'Your documents show that...'\n"
+    "  * 'Looking at your recent records...'\n"
+    "- When answering specific questions (e.g., 'what is my blood pressure?'), respond with:\n"
+    "  'Based on your recent documents, your blood pressure is [value] as recorded on [date]'\n"
+    "- If the information is not found in the documents, clearly state:\n"
+    "  'I couldn't find information about [topic] in your uploaded documents.'\n"
+    "- NEVER make up information that isn't in the provided documents.\n"
+    "- Always cite which document or date the information comes from when possible.\n\n"
     "IMPORTANT MEDICAL DISCLAIMER:\n"
     "- You are NOT a doctor and do not provide diagnoses or treatment decisions.\n"
     "- Always remind users to consult their healthcare provider for medical advice.\n"
     "- Be concise, friendly, and focus on explaining concepts clearly.\n"
+    "- Always refer to the patient as 'you' when addressing them.\n"
 )
 
 DEFAULT_KNOWLEDGE_BASE = (
@@ -63,11 +78,12 @@ class RAGChatTurnModel(BaseModel):
 
 class RAGChatRequestModel(BaseModel):
     question: str
-    top_k: Optional[int] = None
+    top_k: Optional[int] = 5  # Default to 5 relevant chunks
     chat_history: List[RAGChatTurnModel] = []
     # Optional: allow callers to override system prompt / KB for advanced use-cases
     system_prompt: Optional[str] = None
     knowledge_base: Optional[str] = None
+    use_vector_search: Optional[bool] = True  # Enable vector search by default
 
 
 class RAGChatChunkModel(BaseModel):
@@ -234,17 +250,16 @@ async def patient_ai_chat(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Patient-specific AI assistant chat endpoint.
+    Patient-specific AI assistant chat endpoint with Vector RAG.
 
-    This endpoint:
-    - Fetches all extracted text from patient's documents (sorted by date, newest first)
-    - Builds a date-aware knowledge base that prioritizes recent data
-    - Sends the system prompt, patient-specific knowledge base, chat history, 
-      and current question to OpenAI
-    - Returns the model's answer in a chat-friendly format
+    This endpoint now uses a proper RAG system:
+    - Uses vector search to find the most relevant document chunks for the query
+    - OpenAI text-embedding-3-large for semantic search
+    - Structured chunking (400 tokens, 50 overlap)
+    - Each patient has their own vector database
+    - Only sends relevant chunks to the LLM (instead of all documents)
     
-    The knowledge base includes document dates to help the AI understand temporal 
-    context (e.g., latest sugar levels vs older readings).
+    Falls back to legacy mode if vector search is disabled or fails.
     """
     # Reuse existing permission checks to ensure the caller can access this patient
     _ = _get_patient_detail(patient_id, db, current_user)
@@ -258,8 +273,142 @@ async def patient_ai_chat(
 
     client = OpenAI(api_key=openai_api_key)
 
-    # Build patient-specific knowledge base from extracted documents
-    patient_knowledge = _build_patient_knowledge_base(patient_id, db)
+    # Determine top_k (number of chunks to retrieve)
+    top_k = body.top_k or 5
+    
+    # Initialize variables for RAG
+    retrieved_chunks = []
+    patient_knowledge = ""
+    use_vector_rag = body.use_vector_search if body.use_vector_search is not None else True
+    
+    # Try vector search RAG
+    if use_vector_rag:
+        try:
+            vector_store = get_vector_store()
+            
+            # Get patient profile for personalization
+            patient = db.query(Patient).options(
+                joinedload(Patient.user)
+            ).filter(Patient.id == patient_id).first()
+            
+            # Build patient profile section (always included)
+            patient_profile_parts = ["PATIENT PROFILE:", "=" * 70, ""]
+            
+            if patient:
+                if patient.user:
+                    first_name = patient.user.first_name or ""
+                    last_name = patient.user.last_name or ""
+                    full_name = f"{first_name} {last_name}".strip()
+                    if full_name:
+                        patient_profile_parts.append(f"Patient Name: {full_name}")
+                        patient_profile_parts.append(f"First Name: {first_name}")
+                
+                if patient.patient_id:
+                    patient_profile_parts.append(f"Patient ID: {patient.patient_id}")
+                
+                if patient.date_of_birth:
+                    dob_str = patient.date_of_birth.strftime("%B %d, %Y")
+                    patient_profile_parts.append(f"Date of Birth: {dob_str}")
+                    
+                    # Calculate age
+                    today = date.today()
+                    age = today.year - patient.date_of_birth.year
+                    if patient.date_of_birth.month > today.month or \
+                       (patient.date_of_birth.month == today.month and patient.date_of_birth.day > today.day):
+                        age -= 1
+                    patient_profile_parts.append(f"Age: {age} years old")
+                
+                if patient.gender:
+                    patient_profile_parts.append(f"Gender: {patient.gender.value}")
+                
+                if patient.allergies:
+                    patient_profile_parts.append(f"Known Allergies: {patient.allergies}")
+                
+                if patient.medical_history:
+                    patient_profile_parts.append(f"Medical History: {patient.medical_history}")
+                
+                if patient.current_medications:
+                    patient_profile_parts.append(f"Current Medications: {patient.current_medications}")
+                
+                patient_profile_parts.append("")
+                patient_profile_parts.append("=" * 70)
+                patient_profile_parts.append("")
+            
+            patient_profile = "\n".join(patient_profile_parts)
+            
+            # Search for relevant chunks
+            retrieved_chunks = vector_store.search(
+                patient_id=patient_id,
+                query=body.question,
+                top_k=top_k
+            )
+            
+            # Build knowledge base from retrieved chunks
+            if retrieved_chunks:
+                knowledge_parts = [
+                    patient_profile,
+                    "RELEVANT MEDICAL DOCUMENT EXCERPTS:",
+                    "=" * 70,
+                    "",
+                    "The following are the most relevant excerpts from the patient's medical documents",
+                    "related to the question. You MUST use this information to answer the question.",
+                    "",
+                    "CRITICAL INSTRUCTIONS:",
+                    "- Reference these documents explicitly in your answer (e.g., 'Based on your recent documents...')",
+                    "- Cite the source document and date when providing specific information",
+                    "- Only answer based on what is found in these excerpts",
+                    "- If the answer is not in these excerpts, say so clearly",
+                    ""
+                ]
+                
+                for idx, chunk in enumerate(retrieved_chunks, 1):
+                    metadata = chunk.get("metadata", {})
+                    doc_date = metadata.get("upload_date", "Unknown date")
+                    if doc_date and doc_date != "Unknown date":
+                        try:
+                            # Try to format the date nicely
+                            from datetime import datetime
+                            doc_date_obj = datetime.fromisoformat(doc_date.replace('Z', '+00:00'))
+                            doc_date = doc_date_obj.strftime("%B %d, %Y")
+                        except:
+                            pass
+                    
+                    doc_type = metadata.get("document_type", "Unknown type")
+                    doc_name = metadata.get("original_filename", f"Document {metadata.get('document_id')}")
+                    similarity = chunk.get("similarity", 0)
+                    
+                    knowledge_parts.append(f"--- Excerpt {idx} (Relevance: {similarity:.2%}) ---")
+                    knowledge_parts.append(f"Source: {doc_name}")
+                    knowledge_parts.append(f"Date: {doc_date}")
+                    knowledge_parts.append(f"Type: {doc_type}")
+                    knowledge_parts.append("")
+                    knowledge_parts.append(chunk.get("text", ""))
+                    knowledge_parts.append("")
+                    knowledge_parts.append("-" * 70)
+                    knowledge_parts.append("")
+                
+                patient_knowledge = "\n".join(knowledge_parts)
+            else:
+                # No chunks found - patient has no indexed documents
+                patient_knowledge = patient_profile + "\n\n" + (
+                    "DOCUMENT STATUS:\n"
+                    "=" * 70 + "\n"
+                    "No medical documents matching this query were found in the database.\n"
+                    "Either no documents have been uploaded yet, or no relevant documents exist for this question.\n"
+                    "\n"
+                    "INSTRUCTIONS: Inform the patient that you couldn't find specific information in their "
+                    "uploaded documents and suggest they upload relevant medical records if needed."
+                )
+        
+        except Exception as e:
+            # Log error and fall back to legacy mode
+            import logging
+            logging.getLogger(__name__).error(f"Vector search failed, falling back to legacy mode: {str(e)}")
+            use_vector_rag = False
+    
+    # Fall back to legacy mode if vector search is disabled or failed
+    if not use_vector_rag or not patient_knowledge:
+        patient_knowledge = _build_patient_knowledge_base(patient_id, db)
 
     # Build system prompt + knowledge base
     system_prompt = DEFAULT_SYSTEM_PROMPT
@@ -276,8 +425,13 @@ async def patient_ai_chat(
 
     system_message = (
         system_prompt
-        + "\n\n-----\n"
-        + "INTERNAL KNOWLEDGE BASE (do not list verbatim unless useful):\n"
+        + "\n\n" + "=" * 70 + "\n"
+        + "INTERNAL KNOWLEDGE BASE:\n"
+        + "=" * 70 + "\n"
+        + "This knowledge base contains the patient's profile and relevant document excerpts.\n"
+        + "Use this information to answer the patient's question accurately.\n"
+        + "Always reference the documents when providing answers.\n"
+        + "\n"
         + knowledge_base
     )
 
@@ -309,11 +463,23 @@ async def patient_ai_chat(
     if not answer:
         answer = "I'm sorry, I couldn't generate a helpful answer. Please try asking in a different way."
 
-    # For compatibility with existing frontend types, return chunks/used_top_k
+    # Format chunks for response
+    formatted_chunks = []
+    for chunk in retrieved_chunks:
+        formatted_chunks.append(RAGChatChunkModel(
+            content=chunk.get("text", "")[:200] + "...",  # Preview
+            metadata={
+                "document_id": chunk.get("metadata", {}).get("document_id"),
+                "document_type": chunk.get("metadata", {}).get("document_type"),
+                "similarity": chunk.get("similarity", 0),
+                "upload_date": chunk.get("metadata", {}).get("upload_date")
+            }
+        ))
+
     return RAGChatResponseModel(
         answer=answer,
-        chunks=[],
-        used_top_k=0,
+        chunks=formatted_chunks,
+        used_top_k=len(retrieved_chunks),
     )
 
 

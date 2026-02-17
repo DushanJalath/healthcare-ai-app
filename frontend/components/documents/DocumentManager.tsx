@@ -4,7 +4,6 @@ import { Document, Patient, DocumentType, DocumentStatus, UserRole } from '@/typ
 import DocumentUpload from './DocumentUpload'
 import DocumentList from './DocumentList'
 import DocumentSearch from './DocumentSearch'
-import DocumentBulkOperations from './DocumentBulkOperations'
 import DocumentAnalytics from './DocumentAnalytics'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
@@ -18,7 +17,6 @@ export default function DocumentManager({ patientId }: DocumentManagerProps) {
   const [activeTab, setActiveTab] = useState<'list' | 'upload' | 'analytics'>('list')
   const [documents, setDocuments] = useState<Document[]>([])
   const [patients, setPatients] = useState<Patient[]>([])
-  const [selectedDocuments, setSelectedDocuments] = useState<Set<number>>(new Set())
   const [searchFilters, setSearchFilters] = useState({})
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -89,51 +87,10 @@ export default function DocumentManager({ patientId }: DocumentManagerProps) {
     }
   }
 
-  const handleDocumentSelect = (documentId: number, selected: boolean) => {
-    const newSelected = new Set(selectedDocuments)
-    if (selected) {
-      newSelected.add(documentId)
-    } else {
-      newSelected.delete(documentId)
-    }
-    setSelectedDocuments(newSelected)
-  }
-
-  const handleSelectAll = (selected: boolean) => {
-    if (selected) {
-      setSelectedDocuments(new Set(documents.map(d => d.id)))
-    } else {
-      setSelectedDocuments(new Set())
-    }
-  }
-
-  const handleBulkOperation = async (operation: string, parameters?: any) => {
-    if (selectedDocuments.size === 0) {
-      toast.error('No documents selected')
-      return
-    }
-
-    try {
-      await api.post('/documents/bulk', {
-        document_ids: Array.from(selectedDocuments),
-        operation,
-        parameters
-      }, {
-        headers: { Authorization: `Bearer ${session?.accessToken}` }
-      })
-
-      toast.success(`Bulk ${operation} completed successfully`)
-      setSelectedDocuments(new Set())
-      setRefreshTrigger(prev => prev + 1)
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || `Bulk ${operation} failed`)
-    }
-  }
-
   const handleUploadComplete = () => {
     setActiveTab('list')
     setRefreshTrigger(prev => prev + 1)
-    toast.success('Upload completed successfully!')
+    // Toast is already shown in DocumentUpload component
   }
 
   return (
@@ -189,25 +146,12 @@ export default function DocumentManager({ patientId }: DocumentManagerProps) {
             patients={patients}
           />
 
-          {/* Bulk Operations */}
-          {isClinicUser && selectedDocuments.size > 0 && (
-            <DocumentBulkOperations
-              selectedCount={selectedDocuments.size}
-              onBulkOperation={handleBulkOperation}
-              patients={patients}
-            />
-          )}
-
           {/* Document List */}
           <DocumentList
             documents={documents}
             patients={patients}
-            selectedDocuments={selectedDocuments}
-            onDocumentSelect={handleDocumentSelect}
-            onSelectAll={handleSelectAll}
             onRefresh={() => setRefreshTrigger(prev => prev + 1)}
             loading={loading}
-            showSelection={isClinicUser}
           />
         </div>
       )}

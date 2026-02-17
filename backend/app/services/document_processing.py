@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 from ..models.document import Document, DocumentStatus
 from ..models.extraction import Extraction, ExtractionStatus
 from .ocr import extract_text
+from .vector_indexing import index_document_to_vector_db
 
 
 def process_document_ocr(
@@ -77,6 +78,19 @@ def process_document_ocr(
             len(text or ""),
             preview,
         )
+        
+        # Index document to vector database for RAG
+        if document.patient_id and text and text.strip():
+            try:
+                logger.info(f"Starting vector indexing for document {document_id}")
+                index_success = index_document_to_vector_db(document_id, extraction_id)
+                if index_success:
+                    logger.info(f"Successfully indexed document {document_id} to vector database")
+                else:
+                    logger.warning(f"Failed to index document {document_id} to vector database")
+            except Exception as index_error:
+                # Don't fail the entire OCR process if indexing fails
+                logger.error(f"Error indexing document {document_id} to vector database: {str(index_error)}", exc_info=True)
     except Exception as e:
         err_msg = str(e)
         if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "rate_limit" in err_msg.lower():
