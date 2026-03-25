@@ -90,6 +90,7 @@ export interface Document {
   patient_id: number
   clinic_id: number
   uploaded_by?: number
+  is_patient_upload?: boolean
   document_type: DocumentType
   status: DocumentStatus
   filename: string
@@ -268,6 +269,42 @@ export interface PatientStatsResponse {
   patients_by_age_group: Record<string, number>
   patients_with_documents: number
   recent_patients: PatientDetailResponse[]
+}
+
+// Notification Types
+export enum NotificationType {
+  PATIENT_ENROLLED = 'patient_enrolled',
+  PATIENT_UNENROLLED = 'patient_unenrolled',
+  DOCUMENT_UPLOADED = 'document_uploaded',
+  GENERAL = 'general'
+}
+
+export interface NotificationItem {
+  id: number
+  title: string
+  message: string
+  notification_type: NotificationType
+  is_read: boolean
+  related_entity_type?: string
+  related_entity_id?: number
+  created_at: string
+}
+
+export interface NotificationListResponse {
+  notifications: NotificationItem[]
+  total: number
+  unread_count: number
+}
+
+// Clinic enrollment types
+export interface ClinicListItem {
+  id: number
+  name: string
+  clinic_type: string | null
+  address: string | null
+  phone: string | null
+  email: string | null
+  is_enrolled: boolean
 }
 
 // Audit Types

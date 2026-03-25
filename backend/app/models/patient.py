@@ -43,6 +43,12 @@ class Patient(Base):
         back_populates="patient",
         cascade="all, delete-orphan"
     )
+    medical_history_entries = relationship(
+        "MedicalHistoryEntry",
+        back_populates="patient",
+        cascade="all, delete-orphan",
+        order_by="desc(MedicalHistoryEntry.start_date)",
+    )
     
     # Helper properties for backward compatibility and convenience
     @property

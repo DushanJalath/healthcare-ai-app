@@ -96,8 +96,8 @@ export default function DocumentManager({ patientId }: DocumentManagerProps) {
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="border-b border-gray-200 -mx-4 sm:mx-0">
+        <nav className="-mb-px flex space-x-6 sm:space-x-8 overflow-x-auto px-4 sm:px-0 scrollbar-hide">
           <button
             onClick={() => setActiveTab('list')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${

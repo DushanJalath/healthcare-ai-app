@@ -32,9 +32,24 @@ from .routers.clinic import router as clinic_router
 from .routers.audit import router as audit_router
 from .routers.share import router as share_router
 from .routers.vector_management import router as vector_management_router
+from .routers.medical_history import router as medical_history_router
+from .routers.clinic_enrollment import router as clinic_enrollment_router
+from .routers.notifications import router as notifications_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Migrate existing tables: add new columns if missing
+from sqlalchemy import inspect as sa_inspect, text as sa_text
+_insp = sa_inspect(engine)
+if "documents" in _insp.get_table_names():
+    _doc_cols = {c["name"] for c in _insp.get_columns("documents")}
+    with engine.begin() as _conn:
+        if "is_patient_upload" not in _doc_cols:
+            _conn.execute(sa_text("ALTER TABLE documents ADD COLUMN is_patient_upload BOOLEAN NOT NULL DEFAULT false"))
+        if "uploaded_by_user_id" not in _doc_cols:
+            _conn.execute(sa_text("ALTER TABLE documents ADD COLUMN uploaded_by_user_id INTEGER REFERENCES users(id)"))
+del _insp, _doc_cols
 
 # Create upload directory structure using absolute path
 # This ensures directories are created relative to the backend folder, not the current working directory
@@ -103,6 +118,9 @@ app.include_router(clinic_router)
 app.include_router(audit_router)
 app.include_router(share_router)
 app.include_router(vector_management_router)
+app.include_router(medical_history_router)
+app.include_router(clinic_enrollment_router)
+app.include_router(notifications_router)
 
 @app.get("/")
 async def root():

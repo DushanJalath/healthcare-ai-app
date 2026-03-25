@@ -70,7 +70,8 @@ export default function ClinicPatientsPage() {
   }, [searchQuery])
 
 
-  const formatGender = (gender: Gender) => {
+  const formatGender = (gender: Gender | null | undefined) => {
+    if (!gender) return 'Not specified'
     return gender.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
@@ -159,16 +160,16 @@ export default function ClinicPatientsPage() {
 
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">All Clinic Patients</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">All Clinic Patients</h2>
               <p className="mt-1 text-sm text-gray-600">
                 Total: {patients.length} {patients.length === 1 ? 'patient' : 'patients'}
               </p>
             </div>
             <button
               onClick={() => router.push('/clinic/dashboard')}
-              className="text-medical-600 hover:text-medical-700 font-medium"
+              className="text-medical-600 hover:text-medical-700 font-medium self-start sm:self-auto"
             >
               ← Back to Dashboard
             </button>
@@ -199,29 +200,19 @@ export default function ClinicPatientsPage() {
               </p>
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <>
+            {/* Desktop Table (hidden on small screens) */}
+            <div className="hidden lg:block bg-white rounded-lg shadow overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Patient
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Age / Gender
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Contact
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Documents
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Registered
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age / Gender</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documents</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registered</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -233,71 +224,31 @@ export default function ClinicPatientsPage() {
                               {patient.patient_id.slice(0, 2).toUpperCase()}
                             </div>
                             <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">
-                                {patient.patient_id}
-                              </div>
+                              <div className="text-sm font-medium text-gray-900">{patient.patient_id}</div>
                               {(patient.user_first_name || patient.user_last_name) && (
-                                <div className="text-sm text-gray-500">
-                                  {patient.user_first_name} {patient.user_last_name}
-                                </div>
+                                <div className="text-sm text-gray-500">{patient.user_first_name} {patient.user_last_name}</div>
                               )}
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {patient.date_of_birth ? `${calculateAge(patient.date_of_birth)} years` : 'N/A'}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {formatGender(patient.gender)}
-                          </div>
+                          <div className="text-sm text-gray-900">{patient.date_of_birth ? `${calculateAge(patient.date_of_birth)} years` : 'N/A'}</div>
+                          <div className="text-sm text-gray-500">{formatGender(patient.gender)}</div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-900">{patient.phone || 'N/A'}</div>
-                          {patient.user_email && (
-                            <div className="text-sm text-gray-600 truncate max-w-xs" title={patient.user_email}>
-                              {patient.user_email}
-                            </div>
-                          )}
-                          {patient.address && (
-                            <div className="text-sm text-gray-500 truncate max-w-xs" title={patient.address}>
-                              {patient.address}
-                            </div>
-                          )}
+                          {patient.user_email && <div className="text-sm text-gray-600 truncate max-w-xs" title={patient.user_email}>{patient.user_email}</div>}
+                          {patient.address && <div className="text-sm text-gray-500 truncate max-w-xs" title={patient.address}>{patient.address}</div>}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {patient.documents_count || 0} document{(patient.documents_count || 0) !== 1 ? 's' : ''}
-                          </div>
+                          <div className="text-sm text-gray-900">{patient.documents_count || 0} document{(patient.documents_count || 0) !== 1 ? 's' : ''}</div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(patient.created_at)}
-                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(patient.created_at)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                          <button
-                            onClick={() => handleViewPatient(patient.id)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            View
-                          </button>
-                          <button
-                            onClick={() => setEditingPatient(patient)}
-                            className="text-purple-600 hover:text-purple-900"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleViewDocuments(patient.id)}
-                            className="text-purple-600 hover:text-purple-900"
-                          >
-                            Documents
-                          </button>
-                          <button
-                            onClick={() => handleDeletePatient(patient.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            Delete
-                          </button>
+                          <button onClick={() => handleViewPatient(patient.id)} className="text-blue-600 hover:text-blue-900">View</button>
+                          <button onClick={() => setEditingPatient(patient)} className="text-purple-600 hover:text-purple-900">Edit</button>
+                          <button onClick={() => handleViewDocuments(patient.id)} className="text-purple-600 hover:text-purple-900">Documents</button>
+                          <button onClick={() => handleDeletePatient(patient.id)} className="text-red-600 hover:text-red-900">Delete</button>
                         </td>
                       </tr>
                     ))}
@@ -305,12 +256,63 @@ export default function ClinicPatientsPage() {
                 </table>
               </div>
             </div>
+
+            {/* Mobile Card View (shown on small screens) */}
+            <div className="lg:hidden space-y-4">
+              {patients.map((patient) => (
+                <div key={patient.id} className="bg-white rounded-lg shadow p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gradient-to-br from-medical-500 to-tech-500 flex items-center justify-center text-white font-semibold text-sm">
+                      {patient.patient_id.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{patient.patient_id}</p>
+                      {(patient.user_first_name || patient.user_last_name) && (
+                        <p className="text-sm text-gray-500 truncate">{patient.user_first_name} {patient.user_last_name}</p>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-500 flex-shrink-0">{formatDate(patient.created_at)}</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                    <div>
+                      <span className="text-gray-500">Age:</span>{' '}
+                      <span className="text-gray-900">{patient.date_of_birth ? `${calculateAge(patient.date_of_birth)}y` : 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Gender:</span>{' '}
+                      <span className="text-gray-900">{formatGender(patient.gender)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Phone:</span>{' '}
+                      <span className="text-gray-900">{patient.phone || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Docs:</span>{' '}
+                      <span className="text-gray-900">{patient.documents_count || 0}</span>
+                    </div>
+                  </div>
+
+                  {patient.user_email && (
+                    <p className="text-xs text-gray-500 truncate mb-3">{patient.user_email}</p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+                    <button onClick={() => handleViewPatient(patient.id)} className="text-blue-600 hover:text-blue-900 text-sm font-medium">View</button>
+                    <button onClick={() => setEditingPatient(patient)} className="text-purple-600 hover:text-purple-900 text-sm font-medium">Edit</button>
+                    <button onClick={() => handleViewDocuments(patient.id)} className="text-purple-600 hover:text-purple-900 text-sm font-medium">Docs</button>
+                    <button onClick={() => handleDeletePatient(patient.id)} className="text-red-600 hover:text-red-900 text-sm font-medium ml-auto">Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            </>
           )}
 
           {/* Edit Patient Modal */}
           {editingPatient && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-              <div className="relative top-8 mx-auto max-w-4xl bg-white rounded-lg shadow-lg">
+              <div className="relative top-4 sm:top-8 mx-2 sm:mx-4 lg:mx-auto max-w-4xl bg-white rounded-lg shadow-lg">
                 <div className="p-6">
                   <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-900">

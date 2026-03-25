@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
-import { useRouter } from 'next/router'
 import Head from 'next/head'
+import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import Navbar from '@/components/layout/Navbar'
 import api from '@/utils/api'
 import toast, { Toaster } from 'react-hot-toast'
+import { UserRole } from '@/types'
 
 interface UserProfile {
   id: number
@@ -20,7 +21,6 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const { data: session } = useSession()
-  const router = useRouter()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -200,6 +200,14 @@ export default function ProfilePage() {
     })
   }
 
+  const getDashboardHref = (): string => {
+    const role = session?.user?.role
+    if (role === UserRole.PATIENT) return '/patients/dashboard'
+    if (role === UserRole.CLINIC_ADMIN || role === UserRole.CLINIC_STAFF) return '/clinic/dashboard'
+    if (role === UserRole.ADMIN) return '/dashboard'
+    return '/'
+  }
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -223,6 +231,15 @@ export default function ProfilePage() {
         />
 
         <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          <div className="mb-6">
+            <Link
+              href={getDashboardHref()}
+              className="text-medical-600 hover:text-medical-800 font-medium inline-flex items-center"
+            >
+              ← Back to dashboard
+            </Link>
+          </div>
+
           {/* Profile Information */}
           <div className="bg-white shadow rounded-lg mb-6">
             <div className="px-6 py-4 border-b border-gray-200">
@@ -446,7 +463,7 @@ export default function ProfilePage() {
             </div>
             
             <div className="px-6 py-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-sm font-medium text-gray-900">Delete Account</h3>
                   <p className="text-sm text-gray-500">
@@ -455,7 +472,7 @@ export default function ProfilePage() {
                 </div>
                 <button
                   onClick={() => setShowDeleteModal(true)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex-shrink-0 self-start sm:self-auto"
                 >
                   Delete Account
                 </button>
@@ -494,20 +511,20 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+              <div className="px-6 py-4 border-t border-gray-200 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-3 sm:gap-0">
                 <button
                   onClick={() => {
                     setShowDeleteModal(false)
                     setDeletePassword('')
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 w-full sm:w-auto"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDeleteAccount}
                   disabled={deleting || !deletePassword}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                 >
                   {deleting ? 'Deleting...' : 'Delete My Account'}
                 </button>

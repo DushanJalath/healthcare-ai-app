@@ -7,6 +7,8 @@ from .extraction import Extraction
 from .audit_log import AuditLog
 from .share_link import MedicalRecordShareLink
 from .document_chunk import DocumentChunk
+from .medical_history import MedicalHistoryEntry, MedicalEntryStatus
+from .notification import Notification, NotificationType
 
 __all__ = [
     "User",
@@ -19,4 +21,8 @@ __all__ = [
     "AuditLog",
     "MedicalRecordShareLink",
     "DocumentChunk",
+    "MedicalHistoryEntry",
+    "MedicalEntryStatus",
+    "Notification",
+    "NotificationType",
 ]

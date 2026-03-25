@@ -226,9 +226,9 @@ export default function AuditLogViewer({
                     </p>
                     
                     <div className="mt-1 text-xs text-gray-500 space-y-1">
-                      <div className="flex items-center space-x-4">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                         {!patientOnly && log.user_email && (
-                          <span>User: {log.user_email}</span>
+                          <span className="truncate max-w-[200px] sm:max-w-none">User: {log.user_email}</span>
                         )}
                         {log.entity_name && (
                           <span>Entity: {log.entity_name}</span>
@@ -278,7 +278,7 @@ export default function AuditLogViewer({
 
       {/* Pagination */}
       {total > 20 && (
-        <div className="px-6 py-3 border-t border-gray-200 flex justify-between items-center">
+        <div className="px-4 sm:px-6 py-3 border-t border-gray-200 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
           <div className="text-sm text-gray-700">
             Showing {((page - 1) * 20) + 1} to {Math.min(page * 20, total)} of {total} entries
           </div>

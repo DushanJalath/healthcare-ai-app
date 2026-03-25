@@ -17,6 +17,15 @@ export default function PatientDetailPage() {
   const [patient, setPatient] = useState<PatientDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
+  const [historyEntries, setHistoryEntries] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [showAddHistory, setShowAddHistory] = useState(false)
+  const [savingHistory, setSavingHistory] = useState(false)
+  const [historyForm, setHistoryForm] = useState({
+    title: '', condition: '', description: '', medications: '',
+    treating_doctor: '', clinic_name: '', start_date: '', end_date: '',
+    status: 'resolved' as 'ongoing' | 'resolved' | 'chronic',
+  })
 
   const patientId = typeof id === 'string' ? parseInt(id) : null
 
@@ -26,6 +35,7 @@ export default function PatientDetailPage() {
   useEffect(() => {
     if (session?.accessToken && patientId) {
       fetchPatient()
+      fetchHistoryEntries()
     }
   }, [session, patientId])
 
@@ -81,6 +91,55 @@ export default function PatientDetailPage() {
       } else {
         toast.error('Failed to update patient')
       }
+    }
+  }
+
+  const fetchHistoryEntries = async () => {
+    if (!session?.accessToken || !patientId) return
+    try {
+      setHistoryLoading(true)
+      const response = await api.get(`/medical-history/patient/${patientId}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      })
+      setHistoryEntries(response.data.entries)
+    } catch {
+      // Silently fail for history - page still usable
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const handleAddHistoryEntry = async () => {
+    if (!session?.accessToken || !patientId) return
+    if (!historyForm.title.trim() || !historyForm.start_date) {
+      toast.error('Title and start date are required')
+      return
+    }
+    try {
+      setSavingHistory(true)
+      await api.post(`/medical-history/patient/${patientId}`, {
+        ...historyForm,
+        condition: historyForm.condition || null,
+        description: historyForm.description || null,
+        medications: historyForm.medications || null,
+        treating_doctor: historyForm.treating_doctor || null,
+        clinic_name: historyForm.clinic_name || null,
+        end_date: historyForm.end_date || null,
+      }, {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      })
+      toast.success('Medical history entry added')
+      setShowAddHistory(false)
+      setHistoryForm({
+        title: '', condition: '', description: '', medications: '',
+        treating_doctor: '', clinic_name: '', start_date: '', end_date: '',
+        status: 'resolved',
+      })
+      fetchHistoryEntries()
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to add entry')
+    } finally {
+      setSavingHistory(false)
     }
   }
 
@@ -202,7 +261,7 @@ export default function PatientDetailPage() {
                 {/* Basic Information */}
                 <div className="bg-white shadow rounded-lg p-6">
                   <h2 className="text-xl font-bold text-gray-900 mb-4">Basic Information</h2>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm font-medium text-gray-500">Patient ID</label>
                       <p className="mt-1 text-sm text-gray-900">{patient.patient_id}</p>
@@ -239,7 +298,7 @@ export default function PatientDetailPage() {
                 {/* Emergency Contact */}
                 <div className="bg-white shadow rounded-lg p-6">
                   <h2 className="text-xl font-bold text-gray-900 mb-4">Emergency Contact</h2>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm font-medium text-gray-500">Contact Name</label>
                       <p className="mt-1 text-sm text-gray-900">
@@ -278,6 +337,171 @@ export default function PatientDetailPage() {
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Sickness & Treatment History */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-900">Sickness &amp; Treatment History</h2>
+                    {isClinicUser && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAddHistory(!showAddHistory)}
+                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                      >
+                        + Add Entry
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Add form */}
+                  {showAddHistory && (
+                    <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Add Medical History Entry</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Title *</label>
+                          <input type="text" value={historyForm.title}
+                            onChange={(e) => setHistoryForm(f => ({ ...f, title: e.target.value }))}
+                            placeholder="e.g. Flu Treatment"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Condition</label>
+                          <input type="text" value={historyForm.condition}
+                            onChange={(e) => setHistoryForm(f => ({ ...f, condition: e.target.value }))}
+                            placeholder="e.g. Influenza"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900" />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Medications</label>
+                          <textarea value={historyForm.medications}
+                            onChange={(e) => setHistoryForm(f => ({ ...f, medications: e.target.value }))}
+                            placeholder="e.g. Paracetamol 500mg twice daily" rows={2}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900" />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                          <textarea value={historyForm.description}
+                            onChange={(e) => setHistoryForm(f => ({ ...f, description: e.target.value }))}
+                            rows={2} placeholder="Additional notes..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Doctor</label>
+                          <input type="text" value={historyForm.treating_doctor}
+                            onChange={(e) => setHistoryForm(f => ({ ...f, treating_doctor: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Clinic</label>
+                          <input type="text" value={historyForm.clinic_name}
+                            onChange={(e) => setHistoryForm(f => ({ ...f, clinic_name: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Start Date *</label>
+                          <input type="date" value={historyForm.start_date}
+                            onChange={(e) => setHistoryForm(f => ({ ...f, start_date: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900"
+                            style={{ colorScheme: 'light' }} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">End Date</label>
+                          <input type="date" value={historyForm.end_date}
+                            onChange={(e) => setHistoryForm(f => ({ ...f, end_date: e.target.value }))}
+                            disabled={historyForm.status === 'ongoing'}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900"
+                            style={{ colorScheme: 'light' }} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                          <select value={historyForm.status}
+                            onChange={(e) => {
+                              const val = e.target.value as 'ongoing' | 'resolved' | 'chronic'
+                              setHistoryForm(f => ({ ...f, status: val, end_date: val === 'ongoing' ? '' : f.end_date }))
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900"
+                            style={{ colorScheme: 'light' }}>
+                            <option value="resolved">Resolved</option>
+                            <option value="ongoing">Ongoing</option>
+                            <option value="chronic">Chronic</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex space-x-3 mt-4">
+                        <button type="button" onClick={handleAddHistoryEntry} disabled={savingHistory}
+                          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50">
+                          {savingHistory ? 'Saving...' : 'Save Entry'}
+                        </button>
+                        <button type="button" onClick={() => setShowAddHistory(false)}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Timeline entries */}
+                  {historyLoading ? (
+                    <div className="animate-pulse space-y-4">
+                      {[...Array(2)].map((_, i) => (
+                        <div key={i} className="h-20 bg-gray-100 rounded" />
+                      ))}
+                    </div>
+                  ) : historyEntries.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-6">No medical history entries recorded yet.</p>
+                  ) : (
+                    <div className="relative">
+                      <div className="absolute left-[0.35rem] top-0 bottom-0 w-0.5 bg-gray-200" />
+                      <div className="space-y-4">
+                        {historyEntries.map((entry: any) => (
+                          <div key={entry.id} className="relative flex gap-3 ml-0">
+                            <div className={`relative z-10 flex-shrink-0 w-3 h-3 mt-1.5 rounded-full border-2 ${
+                              entry.status === 'ongoing' ? 'bg-green-500 border-green-300' :
+                              entry.status === 'chronic' ? 'bg-orange-500 border-orange-300' :
+                              'bg-blue-500 border-blue-300'
+                            }`} />
+                            <div className="flex-1 bg-gray-50 rounded-lg border p-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h5 className="text-sm font-semibold text-gray-900">{entry.title}</h5>
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  entry.status === 'ongoing' ? 'bg-green-100 text-green-800' :
+                                  entry.status === 'chronic' ? 'bg-orange-100 text-orange-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                                </span>
+                              </div>
+                              {entry.condition && <p className="text-xs text-gray-600 mt-0.5">Diagnosis: {entry.condition}</p>}
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {new Date(entry.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                {' - '}
+                                {entry.end_date ? new Date(entry.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Present'}
+                              </p>
+                              {(entry.clinic_name || entry.treating_doctor) && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {entry.treating_doctor && `Dr. ${entry.treating_doctor}`}
+                                  {entry.treating_doctor && entry.clinic_name && ' at '}
+                                  {entry.clinic_name}
+                                </p>
+                              )}
+                              {entry.medications && (
+                                <div className="mt-2 p-2 bg-green-50 rounded border border-green-100">
+                                  <p className="text-xs font-medium text-green-800 mb-0.5">Medications</p>
+                                  <p className="text-xs text-gray-700 whitespace-pre-line">{entry.medications}</p>
+                                </div>
+                              )}
+                              {entry.description && <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{entry.description}</p>}
+                              {entry.created_by_name && (
+                                <p className="mt-1 text-xs text-gray-400">Added by: {entry.created_by_name}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

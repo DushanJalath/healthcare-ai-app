@@ -98,7 +98,7 @@ export default function ClinicDashboard() {
               {/* Quick Actions */}
               <div className="mb-8">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <button
                     onClick={() => handleQuickAction('create_patient')}
                     className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left"

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, BigInteger
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, BigInteger, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
@@ -34,11 +34,14 @@ class Document(Base):
     upload_date = Column(DateTime(timezone=True), server_default=func.now())
     processed_date = Column(DateTime(timezone=True))
     notes = Column(Text)
+    is_patient_upload = Column(Boolean, default=False, server_default="false", nullable=False)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     patient = relationship("Patient", back_populates="documents")
     clinic = relationship("Clinic", back_populates="documents")
+    uploaded_by_user = relationship("User", foreign_keys=[uploaded_by_user_id])
     extractions = relationship("Extraction", back_populates="document")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan", passive_deletes=True)

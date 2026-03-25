@@ -79,8 +79,8 @@ def process_document_ocr(
             preview,
         )
         
-        # Index document to vector database for RAG
-        if document.patient_id and text and text.strip():
+        # Index document to vector database for RAG (skip patient self-uploads)
+        if document.patient_id and text and text.strip() and not document.is_patient_upload:
             try:
                 logger.info(f"Starting vector indexing for document {document_id}")
                 index_success = index_document_to_vector_db(document_id, extraction_id)
@@ -89,8 +89,9 @@ def process_document_ocr(
                 else:
                     logger.warning(f"Failed to index document {document_id} to vector database")
             except Exception as index_error:
-                # Don't fail the entire OCR process if indexing fails
                 logger.error(f"Error indexing document {document_id} to vector database: {str(index_error)}", exc_info=True)
+        elif document.is_patient_upload:
+            logger.info(f"Skipping vector indexing for patient-uploaded document {document_id}")
     except Exception as e:
         err_msg = str(e)
         if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "rate_limit" in err_msg.lower():

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, status, Query, Request, UploadFile
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, func, and_
 from typing import List, Optional
@@ -8,12 +8,15 @@ from pydantic import BaseModel
 from ..database import get_db
 from ..models.patient import Patient
 from ..models.patient_clinic import PatientClinic
+from ..models.clinic import Clinic
 from ..models.document import Document, DocumentStatus, DocumentType
-from ..models.extraction import Extraction
+from ..models.extraction import Extraction, ExtractionStatus, ExtractionType
 from ..models.user import User, UserRole
+from ..models.notification import Notification, NotificationType
 from ..schemas.patient import PatientDetailResponse
-from ..schemas.document import DocumentResponse
+from ..schemas.document import DocumentResponse, DocumentUploadResponse
 from ..utils.deps import get_current_active_user
+from ..utils.file_handler import save_upload_file
 from ..utils.audit import get_audit_logger, AuditAction, AuditEntityType
 
 router = APIRouter(prefix="/patient-dashboard", tags=["patient-dashboard"])
@@ -270,6 +273,141 @@ async def get_patient_stats(
         "failed_documents": failed_docs
     }
 
+
+@router.get("/medical-records")
+async def get_patient_medical_records(
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Return unified medical records for the patient: profile medical info,
+    document breakdown by type, and all documents with their OCR-extracted text.
+    """
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    audit_logger = get_audit_logger(db)
+    audit_logger.log_patient_action(
+        action=AuditAction.VIEW,
+        user=current_user,
+        patient_id=patient.id,
+        patient_name=patient.patient_id,
+        description="Viewed unified medical records",
+        request=request,
+    )
+
+    documents = (
+        db.query(Document)
+        .filter(Document.patient_id == patient.id)
+        .options(joinedload(Document.extractions))
+        .order_by(desc(Document.upload_date))
+        .all()
+    )
+
+    records_by_type: dict = {}
+    for doc in documents:
+        doc_type = doc.document_type.value if doc.document_type else "other"
+        if doc_type not in records_by_type:
+            records_by_type[doc_type] = []
+
+        extracted_text = None
+        extraction_date = None
+        if doc.extractions:
+            completed = [e for e in doc.extractions if e.status == ExtractionStatus.COMPLETED and e.raw_text]
+            if completed:
+                latest = max(completed, key=lambda e: e.completed_at or e.created_at)
+                extracted_text = latest.raw_text
+                extraction_date = latest.completed_at
+
+        records_by_type[doc_type].append({
+            "id": doc.id,
+            "original_filename": doc.original_filename,
+            "document_type": doc_type,
+            "upload_date": doc.upload_date,
+            "status": doc.status.value,
+            "file_size": doc.file_size,
+            "extracted_text": extracted_text,
+            "extraction_date": extraction_date,
+            "clinic_id": doc.clinic_id,
+        })
+
+    return {
+        "patient_id": patient.patient_id,
+        "medical_history": patient.medical_history,
+        "allergies": patient.allergies,
+        "current_medications": patient.current_medications,
+        "total_documents": len(documents),
+        "records_by_type": records_by_type,
+    }
+
+
+@router.get("/medication-history")
+async def get_patient_medication_history(
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Return the patient's medication history: current medications from the
+    profile, plus all prescription-type documents with their extracted text.
+    """
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    audit_logger = get_audit_logger(db)
+    audit_logger.log_patient_action(
+        action=AuditAction.VIEW,
+        user=current_user,
+        patient_id=patient.id,
+        patient_name=patient.patient_id,
+        description="Viewed medication history",
+        request=request,
+    )
+
+    prescriptions = (
+        db.query(Document)
+        .filter(
+            Document.patient_id == patient.id,
+            Document.document_type == DocumentType.PRESCRIPTION,
+        )
+        .options(joinedload(Document.extractions))
+        .order_by(desc(Document.upload_date))
+        .all()
+    )
+
+    prescription_records = []
+    for doc in prescriptions:
+        extracted_text = None
+        extraction_date = None
+        if doc.extractions:
+            completed = [e for e in doc.extractions if e.status == ExtractionStatus.COMPLETED and e.raw_text]
+            if completed:
+                latest = max(completed, key=lambda e: e.completed_at or e.created_at)
+                extracted_text = latest.raw_text
+                extraction_date = latest.completed_at
+
+        prescription_records.append({
+            "id": doc.id,
+            "original_filename": doc.original_filename,
+            "upload_date": doc.upload_date,
+            "status": doc.status.value,
+            "file_size": doc.file_size,
+            "extracted_text": extracted_text,
+            "extraction_date": extraction_date,
+            "clinic_id": doc.clinic_id,
+        })
+
+    return {
+        "current_medications": patient.current_medications,
+        "allergies": patient.allergies,
+        "total_prescriptions": len(prescription_records),
+        "prescriptions": prescription_records,
+    }
+
+
 def _build_patient_timeline(patient_id: int, db: Session, days: int = 30, clinic_id: Optional[int] = None) -> List[dict]:
     """Build patient timeline events. Optionally filter by clinic_id."""
     
@@ -369,3 +507,293 @@ def _build_patient_detail(patient: Patient, db: Session):
     }
     
     return PatientDetailResponse(**response_data)
+
+
+ALLOWED_MIME_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/tiff",
+    "image/bmp",
+}
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+@router.post("/my-uploads", response_model=DocumentUploadResponse)
+async def patient_upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    document_type: Optional[DocumentType] = Form(None),
+    notes: Optional[str] = Form(None),
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Allow patients to upload their own records.  These documents are marked as
+    patient-uploaded, run through OCR for text extraction, but are NOT indexed
+    into the vector database and are therefore excluded from the AI chatbot.
+    """
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Only patients can use this endpoint")
+
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {file.content_type}. Allowed: PDF, JPEG, PNG, TIFF, BMP",
+        )
+
+    try:
+        file_path, unique_filename, file_size = await save_upload_file(file)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds maximum allowed size of 50 MB")
+
+    document = Document(
+        patient_id=patient.id,
+        clinic_id=None,
+        filename=unique_filename,
+        original_filename=file.filename or "unknown",
+        file_path=file_path,
+        file_size=file_size,
+        mime_type=file.content_type or "application/octet-stream",
+        document_type=document_type or DocumentType.OTHER,
+        status=DocumentStatus.UPLOADED,
+        notes=notes,
+        is_patient_upload=True,
+        uploaded_by_user_id=current_user.id,
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    extraction = Extraction(
+        document_id=document.id,
+        patient_id=patient.id,
+        extraction_type=ExtractionType.GENERAL,
+        status=ExtractionStatus.PENDING,
+        extraction_method="OPENAI_OCR",
+    )
+    db.add(extraction)
+    db.commit()
+    db.refresh(extraction)
+
+    from ..services.document_processing import process_document_ocr
+    background_tasks.add_task(
+        process_document_ocr, document.id, extraction.id, use_openai=True
+    )
+
+    audit_logger = get_audit_logger(db)
+    audit_logger.log_patient_action(
+        action=AuditAction.UPLOAD,
+        user=current_user,
+        patient_id=patient.id,
+        patient_name=patient.patient_id,
+        description=f"Patient uploaded document: {document.original_filename}",
+        request=request,
+        extra_metadata={"document_id": document.id, "document_type": str(document.document_type)},
+    )
+
+    return DocumentUploadResponse(
+        message="Document uploaded successfully",
+        document=DocumentResponse.from_orm(document),
+        processing_started=True,
+    )
+
+
+@router.delete("/my-uploads/{document_id}")
+async def patient_delete_own_upload(
+    document_id: int,
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Allow patients to delete documents they uploaded themselves."""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Only patients can use this endpoint")
+
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.patient_id == patient.id,
+            Document.is_patient_upload == True,
+        )
+        .first()
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found or you can only delete your own uploads")
+
+    original_name = document.original_filename
+
+    for ext in document.extractions:
+        db.delete(ext)
+    for chunk in document.chunks:
+        db.delete(chunk)
+    db.delete(document)
+    db.commit()
+
+    audit_logger = get_audit_logger(db)
+    audit_logger.log_patient_action(
+        action=AuditAction.DELETE,
+        user=current_user,
+        patient_id=patient.id,
+        patient_name=patient.patient_id,
+        description=f"Patient deleted own upload: {original_name}",
+        request=request,
+        extra_metadata={"document_id": document_id},
+    )
+
+    return {"message": "Document deleted successfully", "document_id": document_id}
+
+
+class ShareWithClinicRequest(BaseModel):
+    clinic_id: int
+
+
+@router.post("/my-uploads/{document_id}/share-with-clinic")
+async def share_document_with_clinic(
+    document_id: int,
+    body: ShareWithClinicRequest,
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Patient shares a personal document with a clinic they are enrolled in."""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Only patients can use this endpoint")
+
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    # Verify patient is enrolled in the clinic
+    membership = (
+        db.query(PatientClinic)
+        .filter(
+            PatientClinic.patient_id == patient.id,
+            PatientClinic.clinic_id == body.clinic_id,
+            PatientClinic.is_active == True,
+        )
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status_code=403, detail="You are not enrolled in this clinic")
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.patient_id == patient.id,
+            Document.is_patient_upload == True,
+        )
+        .first()
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found or not a personal upload")
+
+    if document.clinic_id == body.clinic_id:
+        raise HTTPException(status_code=400, detail="Document is already shared with this clinic")
+
+    clinic = db.query(Clinic).filter(Clinic.id == body.clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+
+    document.clinic_id = body.clinic_id
+    patient_name = f"{current_user.first_name} {current_user.last_name}"
+
+    # Notify all clinic admin and staff
+    clinic_members = (
+        db.query(User)
+        .filter(
+            User.clinic_id == clinic.id,
+            User.role.in_([UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]),
+            User.is_active == True,
+        )
+        .all()
+    )
+    notify_ids: set[int] = set()
+    if clinic.admin_user_id:
+        notify_ids.add(clinic.admin_user_id)
+    for member in clinic_members:
+        notify_ids.add(member.id)
+
+    for uid in notify_ids:
+        notification = Notification(
+            user_id=uid,
+            title="Patient Shared a Document",
+            message=f"{patient_name} shared \"{document.original_filename}\" with your clinic.",
+            notification_type=NotificationType.DOCUMENT_UPLOADED,
+            related_entity_type="document",
+            related_entity_id=document.id,
+        )
+        db.add(notification)
+
+    db.commit()
+
+    audit_logger = get_audit_logger(db)
+    audit_logger.log_patient_action(
+        action=AuditAction.UPDATE,
+        user=current_user,
+        patient_id=patient.id,
+        patient_name=patient.patient_id,
+        description=f"Shared document '{document.original_filename}' with clinic '{clinic.name}'",
+        request=request,
+        extra_metadata={"document_id": document_id, "clinic_id": body.clinic_id},
+    )
+
+    return {
+        "message": f"Document shared with {clinic.name}",
+        "document_id": document_id,
+        "clinic_id": body.clinic_id,
+        "clinic_name": clinic.name,
+    }
+
+
+@router.post("/my-uploads/{document_id}/revoke-clinic-access")
+async def revoke_clinic_access(
+    document_id: int,
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Patient revokes clinic access from a personal document."""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Only patients can use this endpoint")
+
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.patient_id == patient.id,
+            Document.is_patient_upload == True,
+        )
+        .first()
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found or not a personal upload")
+
+    if not document.clinic_id:
+        raise HTTPException(status_code=400, detail="Document is not shared with any clinic")
+
+    clinic = db.query(Clinic).filter(Clinic.id == document.clinic_id).first()
+    clinic_name = clinic.name if clinic else "Unknown"
+    document.clinic_id = None
+    db.commit()
+
+    return {"message": f"Clinic access revoked from document", "document_id": document_id}

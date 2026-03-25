@@ -193,7 +193,8 @@ def _build_patient_knowledge_base(patient_id: int, db: Session) -> str:
             Extraction.patient_id == patient_id,
             Extraction.status == ExtractionStatus.COMPLETED,
             Extraction.raw_text.isnot(None),
-            Extraction.raw_text != ""
+            Extraction.raw_text != "",
+            Document.is_patient_upload == False,
         )
         .order_by(desc(Document.upload_date))
         .all()

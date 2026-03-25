@@ -238,7 +238,7 @@ export default function DocumentList({
               <p className="text-gray-500">No documents found</p>
             </div>
           ) : (
-            <div className="overflow-hidden">
+            <div className="overflow-x-auto -mx-4 sm:-mx-6">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -356,7 +356,7 @@ export default function DocumentList({
         {/* Pagination - only show in standalone mode */}
         {!isManagedMode && total > perPage && (
           <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 sm:px-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-gray-700">
                 Showing {((page - 1) * perPage) + 1} to {Math.min(page * perPage, total)} of {total} results
               </div>
@@ -384,7 +384,7 @@ export default function DocumentList({
       {/* Assignment Modal */}
       {selectedDocument && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="relative top-20 mx-2 sm:mx-auto p-5 border w-auto max-w-sm sm:max-w-md shadow-lg rounded-md bg-white">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
               Assign Document to Patient
             </h3>

@@ -4,9 +4,9 @@ import secrets
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, desc
 
 from ..database import get_db
 from ..models.patient import Patient
@@ -14,6 +14,8 @@ from ..models.document import Document
 from ..models.share_link import MedicalRecordShareLink
 from ..models.user import User, UserRole
 from ..schemas.document import (
+    PatientShareLinkItem,
+    PatientShareLinksListResponse,
     PublicSharedDocument,
     PublicShareLinkResponse,
     ShareLinkCreateResponse,
@@ -61,8 +63,9 @@ async def generate_share_link_for_patient(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Generate a 24-hour public share link for the current patient's medical documents.
+    Generate a time-limited public share link for the current patient's medical documents.
 
+    The patient chooses how long the link stays active (1–168 hours).
     The response includes a token and expiry; the frontend is responsible for
     constructing the full URL (e.g. `${window.location.origin}/share/${token}`).
     """
@@ -87,8 +90,7 @@ async def generate_share_link_for_patient(
     if not valid_ids:
         raise HTTPException(status_code=400, detail="No valid documents selected for sharing")
 
-    # 24-hour expiry from now (UTC, timezone-aware)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=payload.expires_in_hours)
 
     # Create random, unguessable token
     token = secrets.token_urlsafe(32)
@@ -105,6 +107,134 @@ async def generate_share_link_for_patient(
     db.refresh(share_link)
 
     return ShareLinkCreateResponse(token=share_link.token, expires_at=share_link.expires_at)
+
+
+@router.get("/my/links", response_model=PatientShareLinksListResponse)
+async def list_my_share_links(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """List all share links created by the current patient (newest first)."""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Only patients can view their share links")
+
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    query = db.query(MedicalRecordShareLink).filter(
+        MedicalRecordShareLink.patient_id == patient.id
+    )
+
+    total = query.count()
+    offset = (page - 1) * per_page
+    links = query.order_by(desc(MedicalRecordShareLink.created_at)).offset(offset).limit(per_page).all()
+
+    now = datetime.now(timezone.utc)
+    items: List[PatientShareLinkItem] = []
+    for link in links:
+        exp = link.expires_at
+        if exp and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        is_expired = exp is None or exp <= now
+
+        if link.revoked:
+            status = "revoked"
+        elif is_expired:
+            status = "expired"
+        else:
+            status = "active"
+
+        items.append(
+            PatientShareLinkItem(
+                id=link.id,
+                token=link.token,
+                expires_at=link.expires_at,
+                created_at=link.created_at,
+                revoked=link.revoked,
+                revoked_at=link.revoked_at,
+                view_count=link.view_count,
+                document_ids=link.document_ids,
+                is_expired=is_expired,
+                status=status,
+            )
+        )
+
+    return PatientShareLinksListResponse(
+        links=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.patch("/my/links/{link_id}/revoke")
+async def revoke_share_link(
+    link_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Revoke (deactivate) a share link owned by the current patient."""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Only patients can revoke their share links")
+
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    link = (
+        db.query(MedicalRecordShareLink)
+        .filter(
+            MedicalRecordShareLink.id == link_id,
+            MedicalRecordShareLink.patient_id == patient.id,
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="Share link not found")
+    if link.revoked:
+        raise HTTPException(status_code=400, detail="Share link is already revoked")
+
+    link.revoked = True
+    link.revoked_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"message": "Share link revoked successfully", "link_id": link.id}
+
+
+@router.delete("/my/links/{link_id}")
+async def delete_share_link(
+    link_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Permanently delete a revoked share link owned by the current patient."""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Only patients can delete their share links")
+
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    link = (
+        db.query(MedicalRecordShareLink)
+        .filter(
+            MedicalRecordShareLink.id == link_id,
+            MedicalRecordShareLink.patient_id == patient.id,
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="Share link not found")
+    if not link.revoked:
+        raise HTTPException(status_code=400, detail="Only revoked share links can be deleted")
+
+    db.delete(link)
+    db.commit()
+
+    return {"message": "Share link deleted successfully", "link_id": link_id}
 
 
 @router.get("/{token}", response_model=PublicShareLinkResponse)

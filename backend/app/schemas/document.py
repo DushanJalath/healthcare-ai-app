@@ -57,7 +57,7 @@ class DocumentUpdate(BaseModel, SecurityValidatorMixin):
 class DocumentResponse(DocumentBase):
     id: int
     patient_id: Optional[int]
-    clinic_id: int
+    clinic_id: Optional[int] = None
     file_path: str
     mime_type: str
     file_size: int
@@ -75,6 +75,7 @@ class DocumentResponse(DocumentBase):
     has_extractions: Optional[bool] = False
     extraction_count: Optional[int] = 0
     last_extraction_date: Optional[datetime] = None
+    is_patient_upload: Optional[bool] = False
     # When status is FAILED, latest extraction error (for UI to show "Reason: ...")
     processing_error: Optional[str] = None
 
@@ -268,24 +269,57 @@ class PublicShareLinkResponse(BaseModel):
 
 
 class ShareLinkCreateResponse(BaseModel):
-    """Response when a patient generates a new 24-hour share link."""
+    """Response when a patient generates a new share link with a custom time period."""
 
     token: str
     expires_at: datetime
+
+
+class PatientShareLinkItem(BaseModel):
+    """Single share link as returned to the patient in their management view."""
+
+    id: int
+    token: str
+    expires_at: datetime
+    created_at: datetime
+    revoked: bool
+    revoked_at: Optional[datetime] = None
+    view_count: int
+    document_ids: Optional[str] = None
+    is_expired: bool = False
+    status: str = "active"
+
+    class Config:
+        from_attributes = True
+
+
+class PatientShareLinksListResponse(BaseModel):
+    """Paginated list of a patient's share links."""
+
+    links: List[PatientShareLinkItem]
+    total: int
+    page: int
+    per_page: int
 
 
 class ShareLinkGenerateRequest(BaseModel):
     """Request payload when a patient generates a share link for specific documents."""
 
     document_ids: List[int]
-    
+    expires_in_hours: int = 24
+
     @validator('document_ids')
     def validate_document_ids(cls, v: List[int]) -> List[int]:
-        # Require at least one document and cap the number to a safe upper bound
         if not v:
             raise ValueError('At least one document must be selected to generate a share link')
         if len(v) > 100:
             raise ValueError('Cannot share more than 100 documents at once')
+        return v
+
+    @validator('expires_in_hours')
+    def validate_expires_in_hours(cls, v: int) -> int:
+        if v < 1 or v > 168:
+            raise ValueError('Expiry must be between 1 and 168 hours (7 days)')
         return v
 
 class DocumentShareRequest(BaseModel, SecurityValidatorMixin):

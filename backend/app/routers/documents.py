@@ -12,6 +12,7 @@ from ..models.patient import Patient
 from ..models.patient_clinic import PatientClinic
 from ..models.user import User, UserRole
 from ..models.extraction import Extraction, ExtractionType, ExtractionStatus
+from ..models.notification import Notification, NotificationType
 from ..schemas.document import (
     DocumentCreate, DocumentUpdate, DocumentResponse, 
     DocumentListResponse, DocumentAssignmentRequest, DocumentUploadResponse,
@@ -133,6 +134,23 @@ async def upload_document(
     db.refresh(extraction)
 
     background_tasks.add_task(process_document_ocr, document.id, extraction.id, use_openai=True)
+
+    # Notify patient that clinic staff uploaded a document
+    if patient_id_int:
+        patient_record = db.query(Patient).filter(Patient.id == patient_id_int).first()
+        if patient_record and patient_record.user_id:
+            clinic_name = clinic.name if clinic else "Your clinic"
+            staff_name = f"{current_user.first_name} {current_user.last_name}"
+            notification = Notification(
+                user_id=patient_record.user_id,
+                title="New Document Added",
+                message=f"{staff_name} from {clinic_name} uploaded a document: \"{file.filename or 'unknown'}\".",
+                notification_type=NotificationType.DOCUMENT_UPLOADED,
+                related_entity_type="document",
+                related_entity_id=document.id,
+            )
+            db.add(notification)
+            db.commit()
 
     return DocumentUploadResponse(
         message="Document uploaded successfully",

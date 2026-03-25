@@ -86,7 +86,7 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
               alt="MediKeep Logo"
               width={200}
               height={200}
-              className="object-contain"
+              className="object-contain w-32 h-32 sm:w-[200px] sm:h-[200px]"
               priority
             />
           </div>

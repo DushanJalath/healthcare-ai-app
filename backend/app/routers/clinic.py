@@ -219,9 +219,10 @@ def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[D
             "color": "green"
         })
     
-    # Recent document uploads
+    # Recent document uploads by clinic staff only (not patient personal uploads)
     recent_documents = db.query(Document).filter(
-        Document.clinic_id == clinic_id
+        Document.clinic_id == clinic_id,
+        Document.is_patient_upload == False
     ).order_by(Document.upload_date.desc()).limit(5).all()
     
     for doc in recent_documents:
@@ -231,6 +232,23 @@ def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[D
             "timestamp": doc.upload_date,
             "icon": "document",
             "color": "blue"
+        })
+    
+    # Documents shared by patients with this clinic
+    shared_documents = db.query(Document).filter(
+        Document.clinic_id == clinic_id,
+        Document.is_patient_upload == True
+    ).order_by(Document.upload_date.desc()).limit(5).all()
+    
+    for doc in shared_documents:
+        patient = db.query(Patient).filter(Patient.id == doc.patient_id).first()
+        patient_label = patient.patient_id if patient else "A patient"
+        activities.append({
+            "type": "document_shared",
+            "title": f"{patient_label} shared: {doc.original_filename}",
+            "timestamp": doc.upload_date,
+            "icon": "share",
+            "color": "teal"
         })
     
     # Sort by timestamp and limit
