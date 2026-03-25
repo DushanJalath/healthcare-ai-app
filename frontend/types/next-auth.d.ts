@@ -10,6 +10,9 @@ declare module 'next-auth' {
       isVerified: boolean
       firstName?: string
       lastName?: string
+      clinicId?: number | null
+      clinicLicenseNumber?: string | null
+      clinicName?: string | null
     } & DefaultSession['user']
   }
 
@@ -22,6 +25,9 @@ declare module 'next-auth' {
     isVerified: boolean
     firstName?: string
     lastName?: string
+    clinicId?: number | null
+    clinicLicenseNumber?: string | null
+    clinicName?: string | null
   }
 }
 
@@ -35,5 +41,8 @@ declare module 'next-auth/jwt' {
     isVerified?: boolean
     firstName?: string
     lastName?: string
+    clinicId?: number | null
+    clinicLicenseNumber?: string | null
+    clinicName?: string | null
   }
 }

@@ -8,7 +8,7 @@ from ..models.user import User,UserRole
 from ..models.clinic import Clinic
 from ..models.patient import Patient
 from ..schemas.auth import LoginRequest, RegisterRequest
-from ..schemas.user import Token, UserResponse, RefreshTokenRequest, RefreshTokenResponse
+from ..schemas.user import Token, UserResponse, RefreshTokenRequest, RefreshTokenResponse, user_response_from_user
 from ..utils.auth import verify_password, get_password_hash, create_access_token, create_refresh_token, verify_refresh_token
 from ..utils.deps import get_current_active_user
 from ..config import settings
@@ -98,7 +98,7 @@ async def register(
         db.add(db_patient)
         db.commit()
     
-    return UserResponse.from_orm(db_user)
+    return user_response_from_user(db_user)
 
 @router.post("/login", response_model=Token)
 async def login(
@@ -132,7 +132,7 @@ async def login(
         "refresh_token": refresh_token,
         "token_type": "bearer",
         "expires_in": settings.access_token_expire_minutes * 60,
-        "user": UserResponse.from_orm(user)
+        "user": user_response_from_user(user)
     }
 
 
@@ -196,7 +196,7 @@ async def login_json(
         "refresh_token": refresh_token,
         "token_type": "bearer",
         "expires_in": settings.access_token_expire_minutes * 60,
-        "user": UserResponse.from_orm(user)
+        "user": user_response_from_user(user)
     }
 
 
@@ -205,7 +205,7 @@ async def get_current_user_profile(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get current user profile."""
-    return UserResponse.from_orm(current_user)
+    return user_response_from_user(current_user)
 
 @router.post("/fix-patient-profile")
 async def fix_patient_profile(

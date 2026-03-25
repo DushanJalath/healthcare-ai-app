@@ -14,7 +14,7 @@ from ..models.audit_log import AuditLog
 from ..schemas.clinic import (
     ClinicResponse, ClinicUpdate, ClinicDashboardStats, ClinicOverview
 )
-from ..schemas.user import UserResponse
+from ..schemas.user import UserResponse, user_response_from_user
 from ..utils.deps import get_current_active_user, require_clinic_access
 
 def get_user_clinic(current_user: User, db: Session) -> Optional[Clinic]:
@@ -197,7 +197,7 @@ async def get_clinic_users(
         User.role.in_([UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF])
     ).order_by(User.created_at.desc()).all()
     
-    return [UserResponse.from_orm(user) for user in users]
+    return [user_response_from_user(user) for user in users]
 
 def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[Dict[str, Any]]:
     """Get recent clinic activity."""

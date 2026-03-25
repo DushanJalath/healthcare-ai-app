@@ -15,8 +15,8 @@ export default function Home() {
         <div className="container mx-auto px-4 py-16">
           <div className="text-center max-w-4xl mx-auto">
             {/* Logo/Brand */}
-            <div className="mb-8">
-              <div className="flex items-center justify-center mb-4">
+            <div className="mb-4">
+              <div className="flex items-center justify-center">
                 <Image
                   src="/medikeep.png"
                   alt="MediKeep Logo"
@@ -36,21 +36,14 @@ export default function Home() {
               </p>
             </div>
 
-            <p className="text-lg sm:text-xl text-gray-700 mb-4 leading-relaxed">
-              Tracking, Predicting and Personalizing care
-            </p>
-            <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
-              Secure platform that unifies scattered medical data and helps patients get personalized, proactive care with intelligent insights and emergency support.
-            </p>
-
-            <p className="text-gray-600 mb-8">
+            <p className="text-gray-600 ">
               New here?{' '}
               <Link href="/register" className="text-medical-600 hover:text-medical-700 font-semibold transition-colors">
                 Create an account
               </Link>
             </p>
 
-            <div className="grid md:grid-cols-2 gap-8 mt-12">
+            <div className="grid md:grid-cols-2 gap-8 mt-8 mb-8">
               <div className="bg-white p-8 rounded-xl shadow-md border border-medical-100 hover:shadow-lg transition-shadow">
                 <div className="w-12 h-12 bg-medical-100 rounded-lg flex items-center justify-center mb-4">
                   <svg className="w-6 h-6 text-medical-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,6 +84,13 @@ export default function Home() {
                 </Link>
               </div>
             </div>
+
+            <p className="text-lg sm:text-xl text-gray-700 mb-4 leading-relaxed">
+              Tracking, Predicting and Personalizing care
+            </p>
+            <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
+              Secure platform that unifies scattered medical data and helps patients get personalized, proactive care with intelligent insights and emergency support.
+            </p>
           </div>
         </div>
       </main>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
@@ -31,6 +31,28 @@ export default function PatientDetailPage() {
 
   const isClinicUser = session?.user?.role === UserRole.CLINIC_ADMIN || 
                      session?.user?.role === UserRole.CLINIC_STAFF
+
+  const resolvedClinicLabel = useMemo(() => {
+    const u = session?.user
+    if (!u || !isClinicUser) return ''
+    const name = u.clinicName?.trim()
+    return name || ''
+  }, [session?.user, isClinicUser])
+
+  const openAddHistoryForm = () => {
+    setHistoryForm({
+      title: '',
+      condition: '',
+      description: '',
+      medications: '',
+      treating_doctor: '',
+      clinic_name: resolvedClinicLabel,
+      start_date: '',
+      end_date: '',
+      status: 'resolved',
+    })
+    setShowAddHistory(true)
+  }
 
   useEffect(() => {
     if (session?.accessToken && patientId) {
@@ -346,7 +368,7 @@ export default function PatientDetailPage() {
                     {isClinicUser && (
                       <button
                         type="button"
-                        onClick={() => setShowAddHistory(!showAddHistory)}
+                        onClick={() => (showAddHistory ? setShowAddHistory(false) : openAddHistoryForm())}
                         className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
                       >
                         + Add Entry
@@ -395,9 +417,14 @@ export default function PatientDetailPage() {
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Clinic</label>
-                          <input type="text" value={historyForm.clinic_name}
+                          <input
+                            type="text"
+                            value={historyForm.clinic_name}
                             onChange={(e) => setHistoryForm(f => ({ ...f, clinic_name: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900" />
+                            readOnly={!!resolvedClinicLabel}
+                            title={resolvedClinicLabel ? 'Filled from your clinic account' : undefined}
+                            className={`w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 ${resolvedClinicLabel ? 'bg-gray-100 cursor-default' : 'bg-white'}`}
+                          />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Start Date *</label>

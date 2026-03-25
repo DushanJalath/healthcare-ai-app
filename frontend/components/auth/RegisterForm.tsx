@@ -60,7 +60,7 @@ export default function RegisterForm() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <div className="flex justify-center mb-6">
+          <div className="flex justify-center">
             <Image
               src="/medikeep.png"
               alt="MediKeep Logo"
@@ -70,7 +70,7 @@ export default function RegisterForm() {
               priority
             />
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="text-center text-3xl font-extrabold text-gray-900">
             Create your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
@@ -91,7 +91,7 @@ export default function RegisterForm() {
                 <input
                   {...register('first_name', { required: 'First name is required' })}
                   type="text"
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                 />
                 {errors.first_name && (
                   <p className="mt-1 text-sm text-red-600">{errors.first_name.message}</p>
@@ -105,7 +105,7 @@ export default function RegisterForm() {
                 <input
                   {...register('last_name', { required: 'Last name is required' })}
                   type="text"
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                 />
                 {errors.last_name && (
                   <p className="mt-1 text-sm text-red-600">{errors.last_name.message}</p>
@@ -126,7 +126,7 @@ export default function RegisterForm() {
                   }
                 })}
                 type="email"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -139,7 +139,7 @@ export default function RegisterForm() {
               </label>
               <select
                 {...register('role', { required: 'Role is required' })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
               >
                 <option value="">Select role</option>
                 <option value={UserRole.PATIENT}>Patient</option>
@@ -160,7 +160,7 @@ export default function RegisterForm() {
                   <input
                     {...register('clinic_name', { required: 'Clinic name is required' })}
                     type="text"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                   />
                   {errors.clinic_name && (
                     <p className="mt-1 text-sm text-red-600">{errors.clinic_name.message}</p>
@@ -174,7 +174,7 @@ export default function RegisterForm() {
                   <input
                     {...register('clinic_license', { required: 'License number is required' })}
                     type="text"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                   />
                   {errors.clinic_license && (
                     <p className="mt-1 text-sm text-red-600">{errors.clinic_license.message}</p>
@@ -191,7 +191,7 @@ export default function RegisterForm() {
                 <input
                   {...register('clinic_license', { required: 'Clinic license number is required' })}
                   type="text"
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
                   placeholder="Enter your clinic's license number"
                 />
                 {errors.clinic_license && (
@@ -216,7 +216,7 @@ export default function RegisterForm() {
                   }
                 })}
                 type="password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
               />
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
@@ -233,7 +233,7 @@ export default function RegisterForm() {
                   validate: value => value === watchPassword || 'Passwords do not match'
                 })}
                 type="password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
               />
               {errors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>

@@ -117,7 +117,7 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
                 })}
                 type="email"
                 autoComplete="email"
-                className="relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-medical-500 focus:border-medical-500 focus:z-10 sm:text-sm"
+                className="relative block w-full px-3 py-2 border border-gray-300 bg-white [color-scheme:light] placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-medical-500 focus:border-medical-500 focus:z-10 sm:text-sm"
                 placeholder="Email address"
               />
               {errors.email && (
@@ -139,7 +139,7 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
                 })}
                 type="password"
                 autoComplete="current-password"
-                className="relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-medical-500 focus:border-medical-500 focus:z-10 sm:text-sm"
+                className="relative block w-full px-3 py-2 border border-gray-300 bg-white [color-scheme:light] placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-medical-500 focus:border-medical-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
               />
               {errors.password && (

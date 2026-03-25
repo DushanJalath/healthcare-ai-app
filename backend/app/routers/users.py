@@ -11,7 +11,7 @@ from ..models.clinic import Clinic
 from ..models.document import Document
 from ..models.extraction import Extraction
 from ..models.audit_log import AuditLog
-from ..schemas.user import UserResponse, UserUpdate, ChangePasswordRequest
+from ..schemas.user import UserResponse, UserUpdate, ChangePasswordRequest, user_response_from_user
 from ..utils.deps import get_current_active_user, require_admin
 from ..utils.auth import verify_password, get_password_hash
 
@@ -29,14 +29,14 @@ async def get_users(
 ):
     """Get all users (admin only)."""
     users = db.query(User).offset(skip).limit(limit).all()
-    return [UserResponse.from_orm(user) for user in users]
+    return [user_response_from_user(user) for user in users]
 
 @router.get("/profile", response_model=UserResponse)
 async def get_user_profile(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get current user profile."""
-    return UserResponse.from_orm(current_user)
+    return user_response_from_user(current_user)
 
 @router.put("/profile", response_model=UserResponse)
 async def update_user_profile(
@@ -52,7 +52,7 @@ async def update_user_profile(
     
     db.commit()
     db.refresh(current_user)
-    return UserResponse.from_orm(current_user)
+    return user_response_from_user(current_user)
 
 @router.post("/change-password")
 async def change_password(

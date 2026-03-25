@@ -57,9 +57,37 @@ class UserResponse(UserBase):
     is_active: bool
     is_verified: bool
     created_at: datetime
-    
+    clinic_id: Optional[int] = None
+    clinic_license_number: Optional[str] = None
+    clinic_name: Optional[str] = None  # associated clinic display name (when user belongs to a clinic)
+
     class Config:
         from_attributes = True
+
+
+def user_response_from_user(user) -> UserResponse:
+    """Build UserResponse including clinic license/name when the user has a clinic (loads clinic if needed)."""
+    license_num: Optional[str] = None
+    clinic_display_name: Optional[str] = None
+    if getattr(user, "clinic_id", None):
+        clinic = getattr(user, "clinic", None)
+        if clinic is not None:
+            license_num = clinic.license_number
+            clinic_display_name = clinic.name
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role,
+        is_active=user.is_active,
+        is_verified=user.is_verified,
+        created_at=user.created_at,
+        clinic_id=user.clinic_id,
+        clinic_license_number=license_num,
+        clinic_name=clinic_display_name,
+    )
 
 class UserLogin(BaseModel):
     email: EmailStr

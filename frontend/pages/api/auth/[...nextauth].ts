@@ -47,7 +47,10 @@ export const authOptions: NextAuthOptions = {
               isActive: user.is_active,
               isVerified: user.is_verified,
               firstName: user.first_name,
-              lastName: user.last_name
+              lastName: user.last_name,
+              clinicId: user.clinic_id ?? null,
+              clinicLicenseNumber: user.clinic_license_number ?? null,
+              clinicName: user.clinic_name ?? null
             }
           }
           
@@ -78,6 +81,9 @@ export const authOptions: NextAuthOptions = {
         token.isVerified = user.isVerified
         token.firstName = user.firstName
         token.lastName = user.lastName
+        token.clinicId = user.clinicId
+        token.clinicLicenseNumber = user.clinicLicenseNumber
+        token.clinicName = user.clinicName
       }
 
       // Refresh access token if expired (within 1 min buffer)
@@ -106,6 +112,9 @@ export const authOptions: NextAuthOptions = {
       session.user.isVerified = token.isVerified as boolean
       session.user.firstName = token.firstName as string
       session.user.lastName = token.lastName as string
+      session.user.clinicId = token.clinicId as number | null | undefined
+      session.user.clinicLicenseNumber = token.clinicLicenseNumber as string | null | undefined
+      session.user.clinicName = token.clinicName as string | null | undefined
       return session
     }
   },
