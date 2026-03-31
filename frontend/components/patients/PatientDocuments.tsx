@@ -358,68 +358,90 @@ export default function PatientDocuments() {
 
     return (
       <div key={doc.id} className="p-4 sm:p-6 hover:bg-gray-50">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-sm font-medium text-gray-900 truncate">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0 w-full sm:flex-1">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:flex-wrap sm:gap-2">
+              <h4 className="text-sm font-medium text-gray-900 break-words [word-break:break-word]">
                 {doc.original_filename || doc.filename}
               </h4>
-              {isPersonal && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                  My Upload
-                </span>
-              )}
-              {sharedClinicName && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-teal-100 text-teal-700">
-                  Shared with {sharedClinicName}
-                </span>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {isPersonal && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                    My Upload
+                  </span>
+                )}
+                {sharedClinicName && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-teal-100 text-teal-700 max-w-full break-words">
+                    Shared with {sharedClinicName}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
-              <span>{getTypeDisplay(doc.document_type)}</span>
-              <span>{doc.upload_date ? new Date(doc.upload_date).toLocaleDateString() : ''}</span>
-              <span>{formatFileSize(doc.file_size)}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+              <span className="shrink-0">{getTypeDisplay(doc.document_type)}</span>
+              <span className="text-gray-300 hidden sm:inline" aria-hidden>
+                ·
+              </span>
+              <span className="shrink-0">{doc.upload_date ? new Date(doc.upload_date).toLocaleDateString() : ''}</span>
+              <span className="text-gray-300 hidden sm:inline" aria-hidden>
+                ·
+              </span>
+              <span className="shrink-0">{formatFileSize(doc.file_size)}</span>
             </div>
-            {doc.notes && <p className="mt-1 text-sm text-gray-600">{doc.notes}</p>}
+            {doc.notes && <p className="mt-1 text-sm text-gray-600 break-words">{doc.notes}</p>}
             {doc.status === DocumentStatus.FAILED && doc.processing_error && (
-              <p className="mt-1 text-xs text-red-600" title={doc.processing_error}>
+              <p className="mt-1 text-xs text-red-600 break-words" title={doc.processing_error}>
                 Reason: {doc.processing_error.length > 80 ? doc.processing_error.slice(0, 80) + '\u2026' : doc.processing_error}
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+          <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 pt-3 sm:w-auto sm:max-w-none sm:flex-shrink-0 sm:border-t-0 sm:pt-0 sm:justify-end">
             {getStatusBadge(doc.status)}
-            <button onClick={() => handleDownload(doc)} className="text-blue-600 hover:text-blue-800 text-sm font-medium whitespace-nowrap">
+            <button
+              type="button"
+              onClick={() => handleDownload(doc)}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            >
               Download
             </button>
             {doc.status === DocumentStatus.PROCESSED && (
-              <button onClick={() => handleViewText(doc)} className="text-green-600 hover:text-green-800 text-sm font-medium whitespace-nowrap">
+              <button type="button" onClick={() => handleViewText(doc)} className="text-green-600 hover:text-green-800 text-sm font-medium">
                 View explanations
               </button>
             )}
-            {/* Share with clinic / Revoke for personal uploads */}
             {isPersonal && !sharedClinicName && enrolledClinics.length > 0 && (
               <button
+                type="button"
                 onClick={() => { setShareModal(doc); setSelectedClinicId(0) }}
-                className="text-teal-600 hover:text-teal-800 text-sm font-medium whitespace-nowrap"
+                className="text-teal-600 hover:text-teal-800 text-sm font-medium"
               >
-                Share with Clinic
+                <span className="sm:hidden">Share</span>
+                <span className="hidden sm:inline">Share with Clinic</span>
               </button>
             )}
             {isPersonal && sharedClinicName && (
               <button
+                type="button"
                 onClick={() => handleRevokeClinicAccess(doc.id)}
                 disabled={revokingDocId === doc.id}
-                className="text-orange-600 hover:text-orange-800 text-sm font-medium whitespace-nowrap disabled:opacity-50"
+                className="text-orange-600 hover:text-orange-800 text-sm font-medium disabled:opacity-50"
               >
-                {revokingDocId === doc.id ? 'Revoking...' : 'Revoke Access'}
+                {revokingDocId === doc.id ? (
+                  'Revoking...'
+                ) : (
+                  <>
+                    <span className="sm:hidden">Revoke</span>
+                    <span className="hidden sm:inline">Revoke Access</span>
+                  </>
+                )}
               </button>
             )}
             {allowDelete && (
               <button
+                type="button"
                 onClick={() => handleDeleteOwnUpload(doc.id)}
                 disabled={deletingId === doc.id}
-                className="text-red-600 hover:text-red-800 text-sm font-medium whitespace-nowrap disabled:opacity-50"
+                className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
               >
                 {deletingId === doc.id ? 'Deleting...' : 'Delete'}
               </button>
