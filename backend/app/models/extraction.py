@@ -29,6 +29,8 @@ class Extraction(Base):
     
     # Extracted data fields
     raw_text = Column(Text)  # OCR extracted text
+    # Cached patient-facing summary + bullets from /documents/{id}/explanations (avoids repeat OpenAI calls)
+    explainer_view_cache = Column(JSON)  # {"summary": str, "explanations": [str, ...]}
     structured_data = Column(JSON)  # Structured extracted data
     confidence_score = Column(Float)  # AI confidence 0-1
     

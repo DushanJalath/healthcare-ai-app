@@ -11,6 +11,7 @@ import MediKeepChatWidget from './MediKeepChatWidget'
 import PremiumHealthChart from './PremiumHealthChart'
 import AuditLogViewer from '@/components/audit/AuditLogViewer'
 import Navbar from '@/components/layout/Navbar'
+import DocumentExplanationsModal from '@/components/documents/DocumentExplanationsModal'
 import { usePremiumSubscription } from '@/hooks/usePremiumSubscription'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
@@ -93,7 +94,13 @@ export default function PatientDashboard() {
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null)
   const [medicationHistory, setMedicationHistory] = useState<any>(null)
   const [medicationHistoryLoading, setMedicationHistoryLoading] = useState(false)
-  const [expandedPrescription, setExpandedPrescription] = useState<number | null>(null)
+  const [rxExplanationsModal, setRxExplanationsModal] = useState<{
+    documentId: number
+    loading: boolean
+    summary: string
+    explanations: string[]
+    error: string | null
+  } | null>(null)
   const [historyEntries, setHistoryEntries] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [showHistoryForm, setShowHistoryForm] = useState(false)
@@ -480,6 +487,60 @@ export default function PatientDashboard() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
+  const handlePrescriptionExplanations = async (documentId: number) => {
+    setRxExplanationsModal({
+      documentId,
+      loading: true,
+      summary: '',
+      explanations: [],
+      error: null
+    })
+    try {
+      const response = await api.get(`/documents/${documentId}/explanations`, {
+        headers: { Authorization: `Bearer ${session?.accessToken}` }
+      })
+      if (response.data.status === 'processing') {
+        toast('Text extraction is still in progress. Please try again later.', { icon: 'ℹ️' })
+        setRxExplanationsModal(null)
+        return
+      }
+      if (response.data.status === 'not_available') {
+        toast.error('No extracted text available for this document.')
+        setRxExplanationsModal(null)
+        return
+      }
+      setRxExplanationsModal({
+        documentId,
+        loading: false,
+        summary: response.data.summary || '',
+        explanations: Array.isArray(response.data.explanations) ? response.data.explanations : [],
+        error: null
+      })
+    } catch (error: any) {
+      const detail = error.response?.data?.detail || 'Failed to load explanations.'
+      setRxExplanationsModal({
+        documentId,
+        loading: false,
+        summary: '',
+        explanations: [],
+        error: typeof detail === 'string' ? detail : 'Failed to load explanations.'
+      })
+    }
+  }
+
+  const handleCopyRxExplanations = () => {
+    if (!rxExplanationsModal || rxExplanationsModal.loading || rxExplanationsModal.error) return
+    const lines = [
+      'Summary',
+      rxExplanationsModal.summary,
+      '',
+      'Explanations',
+      ...rxExplanationsModal.explanations.map((e) => `• ${e}`)
+    ]
+    navigator.clipboard.writeText(lines.join('\n'))
+    toast.success('Copied to clipboard')
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -805,7 +866,7 @@ export default function PatientDashboard() {
               <div className="bg-white rounded-lg shadow p-8 text-center border border-amber-100">
                 <p className="text-lg font-semibold text-gray-900 mb-2">Health trends are a Premium feature</p>
                 <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
-                  See one health metric over time—such as blood sugar—and switch between metrics. Subscribe to unlock
+                  See one health metric over time such as blood sugar and switch between metrics. Subscribe to unlock
                   this tab and the premium assistant options in chat.
                 </p>
                 <Link
@@ -1196,26 +1257,18 @@ export default function PatientDashboard() {
                             )}
                           </div>
 
-                          {rx.extracted_text && (
+                          {rx.status === 'processed' && (
                             <div className="ml-7 mt-2">
                               <button
                                 type="button"
-                                onClick={() => setExpandedPrescription(expandedPrescription === rx.id ? null : rx.id)}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                onClick={() => handlePrescriptionExplanations(rx.id)}
+                                className="text-xs font-medium text-medical-600 hover:text-medical-800"
                               >
-                                {expandedPrescription === rx.id ? 'Hide extracted text' : 'View extracted text'}
+                                View explanations
                               </button>
-                              {expandedPrescription === rx.id && (
-                                <div className="mt-2 p-3 bg-gray-50 rounded text-xs text-gray-700 max-h-64 overflow-y-auto whitespace-pre-line border">
-                                  {rx.extracted_text}
-                                </div>
-                              )}
                             </div>
                           )}
 
-                          {!rx.extracted_text && rx.status === 'processed' && (
-                            <p className="ml-7 mt-1 text-xs text-gray-400 italic">No text was extracted from this document</p>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -1657,6 +1710,16 @@ export default function PatientDashboard() {
           </div>
         )}
       </div>
+
+      <DocumentExplanationsModal
+        open={!!rxExplanationsModal}
+        loading={rxExplanationsModal?.loading ?? false}
+        summary={rxExplanationsModal?.summary ?? ''}
+        explanations={rxExplanationsModal?.explanations ?? []}
+        error={rxExplanationsModal?.error ?? null}
+        onClose={() => setRxExplanationsModal(null)}
+        onCopy={handleCopyRxExplanations}
+      />
 
       {/* Floating MediKeep Assistant - pop-up chatbot */}
       <MediKeepChatWidget

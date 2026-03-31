@@ -49,7 +49,20 @@ if "documents" in _insp.get_table_names():
             _conn.execute(sa_text("ALTER TABLE documents ADD COLUMN is_patient_upload BOOLEAN NOT NULL DEFAULT false"))
         if "uploaded_by_user_id" not in _doc_cols:
             _conn.execute(sa_text("ALTER TABLE documents ADD COLUMN uploaded_by_user_id INTEGER REFERENCES users(id)"))
-del _insp, _doc_cols
+
+_insp = sa_inspect(engine)
+if "extractions" in _insp.get_table_names():
+    _ext_cols = {c["name"] for c in _insp.get_columns("extractions")}
+    with engine.begin() as _conn:
+        if "explainer_view_cache" not in _ext_cols:
+            _dialect = engine.dialect.name
+            if _dialect == "postgresql":
+                _conn.execute(sa_text("ALTER TABLE extractions ADD COLUMN explainer_view_cache JSON"))
+            else:
+                # SQLite and others: store JSON as TEXT
+                _conn.execute(sa_text("ALTER TABLE extractions ADD COLUMN explainer_view_cache TEXT"))
+            print("[OK] Added column extractions.explainer_view_cache")
+del _insp
 
 # Create upload directory structure using absolute path
 # This ensures directories are created relative to the backend folder, not the current working directory

@@ -4,6 +4,7 @@ import { useRouter } from 'next/router'
 import { Document, DocumentType, DocumentStatus, ClinicListItem } from '@/types'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
+import DocumentExplanationsModal from '@/components/documents/DocumentExplanationsModal'
 
 interface EnrolledClinic {
   id: number
@@ -27,10 +28,12 @@ export default function PatientDocuments() {
 
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
-  const [viewingText, setViewingText] = useState<{
+  const [explanationsModal, setExplanationsModal] = useState<{
     documentId: number
-    text: string
-    status: string
+    loading: boolean
+    summary: string
+    explanations: string[]
+    error: string | null
   } | null>(null)
 
   // Share with clinic state
@@ -168,7 +171,7 @@ export default function PatientDocuments() {
               }
               await fetchDocuments()
               if (doc.status === DocumentStatus.PROCESSED) {
-                toast.success('Text extraction complete. You can use View Text.')
+                toast.success('Text extraction complete. You can open View explanations.')
               } else {
                 toast.error('Text extraction failed for this document.')
               }
@@ -231,26 +234,57 @@ export default function PatientDocuments() {
   }
 
   const handleViewText = async (document: Document) => {
+    setExplanationsModal({
+      documentId: document.id,
+      loading: true,
+      summary: '',
+      explanations: [],
+      error: null
+    })
     try {
-      const response = await api.get(`/documents/${document.id}/extracted-text`, {
+      const response = await api.get(`/documents/${document.id}/explanations`, {
         headers: { Authorization: `Bearer ${session?.accessToken}` }
       })
       if (response.data.status === 'processing') {
         toast('Text extraction is still in progress. Please try again later.', { icon: 'info' })
+        setExplanationsModal(null)
         return
       }
       if (response.data.status === 'not_available') {
         toast.error('No extracted text available for this document.')
+        setExplanationsModal(null)
         return
       }
-      setViewingText({
+      setExplanationsModal({
         documentId: document.id,
-        text: response.data.extracted_text,
-        status: response.data.status
+        loading: false,
+        summary: response.data.summary || '',
+        explanations: Array.isArray(response.data.explanations) ? response.data.explanations : [],
+        error: null
       })
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to retrieve extracted text')
+      const detail = error.response?.data?.detail || 'Failed to load explanations.'
+      setExplanationsModal({
+        documentId: document.id,
+        loading: false,
+        summary: '',
+        explanations: [],
+        error: typeof detail === 'string' ? detail : 'Failed to load explanations.'
+      })
     }
+  }
+
+  const handleCopyExplanations = () => {
+    if (!explanationsModal || explanationsModal.loading || explanationsModal.error) return
+    const lines = [
+      'Summary',
+      explanationsModal.summary,
+      '',
+      'Explanations',
+      ...explanationsModal.explanations.map((e) => `• ${e}`)
+    ]
+    navigator.clipboard.writeText(lines.join('\n'))
+    toast.success('Copied to clipboard')
   }
 
   const handleShareWithClinic = async () => {
@@ -360,7 +394,7 @@ export default function PatientDocuments() {
             </button>
             {doc.status === DocumentStatus.PROCESSED && (
               <button onClick={() => handleViewText(doc)} className="text-green-600 hover:text-green-800 text-sm font-medium whitespace-nowrap">
-                View Text
+                View explanations
               </button>
             )}
             {/* Share with clinic / Revoke for personal uploads */}
@@ -654,49 +688,15 @@ export default function PatientDocuments() {
         </div>
       )}
 
-      {/* Extracted Text Modal */}
-      {viewingText && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
-              onClick={() => setViewingText(null)}
-            />
-            <div className="inline-block w-full max-w-4xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Extracted Text</h3>
-                <button onClick={() => setViewingText(null)} className="text-gray-400 hover:text-gray-500">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="mt-4 max-h-96 overflow-y-auto">
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <pre className="whitespace-pre-wrap text-sm text-gray-800 font-mono">{viewingText.text}</pre>
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(viewingText.text)
-                    toast.success('Text copied to clipboard')
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-                >
-                  Copy to Clipboard
-                </button>
-                <button
-                  onClick={() => setViewingText(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <DocumentExplanationsModal
+        open={!!explanationsModal}
+        loading={explanationsModal?.loading ?? false}
+        summary={explanationsModal?.summary ?? ''}
+        explanations={explanationsModal?.explanations ?? []}
+        error={explanationsModal?.error ?? null}
+        onClose={() => setExplanationsModal(null)}
+        onCopy={handleCopyExplanations}
+      />
     </div>
   )
 }

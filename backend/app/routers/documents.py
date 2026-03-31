@@ -23,6 +23,7 @@ from ..utils.deps import get_current_active_user, require_clinic_access
 from ..utils.file_handler import save_upload_file, delete_file, get_file_info
 from ..utils.security import sanitize_error_message_for_display
 from ..services.document_processing import process_document_ocr
+from ..services.document_explanations import generate_summary_and_explanations
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -501,6 +502,96 @@ async def get_extracted_text(
         "extraction_date": extraction.completed_at,
         "processing_time": extraction.processing_time_seconds
     }
+
+
+@router.get("/{document_id}/explanations")
+async def get_document_explanations(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Patient-friendly summary and simple explanations from OCR text.
+    Does not use the RAG/chat pipeline and does not send content to the chatbot.
+    """
+    document = db.query(Document).filter(Document.id == document_id).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if current_user.role == UserRole.PATIENT:
+        patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+        if not patient or document.patient_id != patient.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    elif current_user.role in [UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]:
+        if current_user.clinic_id and document.clinic_id != current_user.clinic_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    extraction = (
+        db.query(Extraction)
+        .filter(
+            Extraction.document_id == document_id,
+            Extraction.status == ExtractionStatus.COMPLETED,
+        )
+        .order_by(desc(Extraction.completed_at))
+        .first()
+    )
+
+    if not extraction or not extraction.raw_text:
+        pending_extraction = (
+            db.query(Extraction)
+            .filter(
+                Extraction.document_id == document_id,
+                Extraction.status.in_([ExtractionStatus.PENDING, ExtractionStatus.IN_PROGRESS]),
+            )
+            .first()
+        )
+
+        if pending_extraction:
+            return {
+                "document_id": document_id,
+                "status": "processing",
+                "message": "Text extraction is still in progress. Please try again later.",
+                "summary": None,
+                "explanations": None,
+            }
+
+        return {
+            "document_id": document_id,
+            "status": "not_available",
+            "message": "No extracted text available for this document.",
+            "summary": None,
+            "explanations": None,
+        }
+
+    cache = extraction.explainer_view_cache
+    if isinstance(cache, dict) and cache.get("summary"):
+        expl = cache.get("explanations") or []
+        if isinstance(expl, list):
+            return {
+                "document_id": document_id,
+                "status": "completed",
+                "summary": str(cache["summary"]),
+                "explanations": [str(x) for x in expl if x is not None],
+                "cached": True,
+            }
+
+    result = generate_summary_and_explanations(extraction.raw_text)
+    extraction.explainer_view_cache = {
+        "summary": result["summary"],
+        "explanations": result["explanations"],
+    }
+    db.commit()
+
+    return {
+        "document_id": document_id,
+        "status": "completed",
+        "summary": result["summary"],
+        "explanations": result["explanations"],
+        "cached": False,
+    }
+
 
 @router.put("/{document_id}/assign", response_model=DocumentResponse)
 async def assign_document_to_patient(
