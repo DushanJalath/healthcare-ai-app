@@ -443,16 +443,41 @@ def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[D
 def _get_patient_demographics(clinic_id: int, db: Session) -> Dict[str, Any]:
     """Get patient demographic breakdown - optimized to use SQL instead of loading all patients."""
     
-    # Gender distribution - use PatientClinic
-    gender_stats = db.query(Patient.gender, func.count(Patient.id)).join(PatientClinic).filter(
-        PatientClinic.clinic_id == clinic_id,
-        PatientClinic.is_active == True
-    ).group_by(Patient.gender).all()
-    
-    gender_distribution = {
-        str(gender.value) if gender else 'not_specified': count 
-        for gender, count in gender_stats
-    }
+    # Gender distribution - distinct patient ids (join can duplicate rows); NULL gender → not_specified
+    gender_stats = (
+        db.query(Patient.gender, func.count(func.distinct(Patient.id)))
+        .join(PatientClinic, Patient.id == PatientClinic.patient_id)
+        .filter(
+            PatientClinic.clinic_id == clinic_id,
+            PatientClinic.is_active == True,
+        )
+        .group_by(Patient.gender)
+        .all()
+    )
+
+    gender_distribution: Dict[str, int] = {}
+    for gender, count in gender_stats:
+        if gender is None:
+            key = "not_specified"
+        else:
+            key = str(gender.value) if hasattr(gender, "value") else str(gender)
+        gender_distribution[key] = int(count or 0)
+
+    enrolled_patient_count = (
+        db.query(func.count(func.distinct(Patient.id)))
+        .join(PatientClinic, Patient.id == PatientClinic.patient_id)
+        .filter(
+            PatientClinic.clinic_id == clinic_id,
+            PatientClinic.is_active == True,
+        )
+        .scalar()
+        or 0
+    )
+    summed_gender = sum(gender_distribution.values())
+    if enrolled_patient_count > 0 and summed_gender < enrolled_patient_count:
+        gender_distribution["not_specified"] = gender_distribution.get("not_specified", 0) + (
+            enrolled_patient_count - summed_gender
+        )
     
     # Age distribution - calculate using SQL date ranges (approximate but much faster)
     from datetime import date

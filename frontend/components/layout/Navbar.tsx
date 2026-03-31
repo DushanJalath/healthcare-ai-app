@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
-import { useRouter } from 'next/router'
 import Image from 'next/image'
 import NotificationBell from './NotificationBell'
 
@@ -10,25 +9,39 @@ interface Clinic {
   name: string
 }
 
+export type PatientPremiumNav =
+  | { variant: 'none' }
+  | { variant: 'cta'; href: string }
+  | { variant: 'active' }
+
 interface NavbarProps {
   title?: string
   subtitle?: string
   clinics?: Clinic[]
   selectedClinicId?: number | null
   onClinicChange?: (clinicId: number | null) => void
+  /** Patient portal: subscription CTA link or subscribed badge */
+  patientPremium?: PatientPremiumNav
+  /** Clinic portal: promo strip for patient Premium pricing (demo UI) */
+  clinicPremiumPromo?: boolean
 }
+
+const PREMIUM_MONTHLY = 16
+const PREMIUM_ANNUAL = 150
 
 export default function Navbar({
   title = 'Dashboard',
   subtitle,
   clinics = [],
   selectedClinicId = null,
-  onClinicChange
+  onClinicChange,
+  patientPremium = { variant: 'none' },
+  clinicPremiumPromo = false
 }: NavbarProps) {
   const { data: session } = useSession()
-  const router = useRouter()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [clinicBilling, setClinicBilling] = useState<'monthly' | 'annual'>('monthly')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -142,6 +155,52 @@ export default function Navbar({
 
           {/* Right side - Actions & Profile */}
           <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
+            {clinicPremiumPromo && (
+              <div className="hidden lg:flex flex-col items-end gap-1 mr-1 border-r border-gray-200 pr-3">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                  Premium features
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600 whitespace-nowrap">
+                    {clinicBilling === 'monthly' ? 'Monthly' : 'Annual'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={clinicBilling === 'annual'}
+                    onClick={() => setClinicBilling((b) => (b === 'monthly' ? 'annual' : 'monthly'))}
+                    className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-medical-500 focus:ring-offset-1"
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
+                        clinicBilling === 'annual' ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+                <span className="text-sm font-bold text-gray-900">
+                  ${clinicBilling === 'monthly' ? PREMIUM_MONTHLY : PREMIUM_ANNUAL}
+                  <span className="text-xs font-normal text-gray-500">
+                    {clinicBilling === 'monthly' ? '/mo' : '/yr'}
+                  </span>
+                </span>
+              </div>
+            )}
+
+            {patientPremium.variant === 'cta' && (
+              <Link
+                href={patientPremium.href}
+                className="hidden sm:inline-flex items-center rounded-full bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:from-amber-600 hover:to-orange-700"
+              >
+                View plans
+              </Link>
+            )}
+            {patientPremium.variant === 'active' && (
+              <span className="hidden sm:inline-flex items-center rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800 border border-violet-200">
+                Subscribed
+              </span>
+            )}
+
             {/* Notification Bell */}
             {session?.user && <NotificationBell />}
 
@@ -237,6 +296,42 @@ export default function Navbar({
         {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="sm:hidden border-t border-gray-200 py-3 space-y-3">
+            {clinicPremiumPromo && (
+              <div className="px-2 pb-2 border-b border-gray-100">
+                <p className="text-xs font-semibold text-amber-800 mb-2">Premium features (patients)</p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-gray-600">{clinicBilling === 'monthly' ? 'Monthly' : 'Annual'}</span>
+                  <button
+                    type="button"
+                    onClick={() => setClinicBilling((b) => (b === 'monthly' ? 'annual' : 'monthly'))}
+                    className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full bg-gray-200"
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 mt-0.5 transform rounded-full bg-white shadow transition ${
+                        clinicBilling === 'annual' ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm font-bold text-gray-900">
+                    ${clinicBilling === 'monthly' ? PREMIUM_MONTHLY : PREMIUM_ANNUAL}
+                  </span>
+                </div>
+              </div>
+            )}
+            {patientPremium.variant === 'cta' && (
+              <Link
+                href={patientPremium.href}
+                className="block mx-2 text-center rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                View plans
+              </Link>
+            )}
+            {patientPremium.variant === 'active' && (
+              <div className="mx-2 text-center rounded-lg bg-violet-100 px-3 py-2 text-sm font-semibold text-violet-800 border border-violet-200">
+                Subscribed
+              </div>
+            )}
             {/* Clinic Selector (mobile) */}
             {clinics.length > 0 && onClinicChange && (
               <div className="space-y-2">

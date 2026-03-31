@@ -531,9 +531,9 @@ async def patient_upload_document(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Allow patients to upload their own records.  These documents are marked as
-    patient-uploaded, run through OCR for text extraction, but are NOT indexed
-    into the vector database and are therefore excluded from the AI chatbot.
+    Allow patients to upload their own records. Documents are marked as patient-uploaded,
+    run through OpenAI Vision OCR in the background, indexed for the patient AI assistant
+    when extraction succeeds, and can be shared with clinics separately.
     """
     if current_user.role != UserRole.PATIENT:
         raise HTTPException(status_code=403, detail="Only patients can use this endpoint")
@@ -582,6 +582,7 @@ async def patient_upload_document(
         extraction_method="OPENAI_OCR",
     )
     db.add(extraction)
+    document.status = DocumentStatus.PROCESSING
     db.commit()
     db.refresh(extraction)
 

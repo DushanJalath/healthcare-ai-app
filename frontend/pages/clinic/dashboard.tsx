@@ -103,6 +103,7 @@ export default function ClinicDashboard() {
         <Navbar
           title="Clinic Dashboard"
           subtitle="Welcome back! Here's what's happening in your clinic."
+          clinicPremiumPromo
         />
 
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -192,33 +193,39 @@ export default function ClinicDashboard() {
                     Patient Demographics
                   </h3>
 
-                  {stats.patient_demographics?.gender_distribution && Object.keys(stats.patient_demographics.gender_distribution).length > 0 && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">By Gender</h4>
-                      <div className="space-y-2">
-                        {Object.entries(stats.patient_demographics.gender_distribution).map(([gender, count]) => (
-                          <div key={gender} className="flex justify-between">
-                            <span className="text-sm">{String(gender).replace('_', ' ')}</span>
-                            <span className="text-sm font-medium">{count}</span>
-                          </div>
-                        ))}
+                  {stats.patient_demographics?.gender_distribution &&
+                    Object.keys(stats.patient_demographics.gender_distribution).length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">By gender</h4>
+                        <div className="space-y-2">
+                          {Object.entries(stats.patient_demographics.gender_distribution).map(([gender, count]) => (
+                            <div key={gender || 'not-specified'} className="flex justify-between">
+                              <span className="text-sm text-gray-800">
+                                {gender === 'not_specified'
+                                  ? 'Not specified'
+                                  : String(gender).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                              </span>
+                              <span className="text-sm font-medium text-gray-900">{Number(count) || 0}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {stats.patient_demographics?.age_distribution && Object.keys(stats.patient_demographics.age_distribution).length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">By Age Group</h4>
-                      <div className="space-y-2">
-                        {Object.entries(stats.patient_demographics.age_distribution).map(([ageGroup, count]) => (
-                          <div key={ageGroup} className="flex justify-between">
-                            <span className="text-sm">{ageGroup} years</span>
-                            <span className="text-sm font-medium">{count}</span>
-                          </div>
-                        ))}
+                  {stats.patient_demographics?.age_distribution &&
+                    Object.keys(stats.patient_demographics.age_distribution).length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">By age group</h4>
+                        <div className="space-y-2">
+                          {Object.entries(stats.patient_demographics.age_distribution).map(([ageGroup, count]) => (
+                            <div key={ageGroup} className="flex justify-between">
+                              <span className="text-sm text-gray-800">{ageGroup} years</span>
+                              <span className="text-sm font-medium text-gray-900">{Number(count) || 0}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {(!stats.patient_demographics?.gender_distribution || Object.keys(stats.patient_demographics.gender_distribution).length === 0) &&
                    (!stats.patient_demographics?.age_distribution || Object.keys(stats.patient_demographics.age_distribution).length === 0) && (

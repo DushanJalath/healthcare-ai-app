@@ -15,6 +15,9 @@ export interface User {
   is_active: boolean
   is_verified: boolean
   created_at: string
+  /** Client-only: set after dummy premium checkout (not from API) */
+  is_premium?: boolean
+  premium_plan?: 'monthly' | 'annual'
 }
 
 export interface LoginRequest {

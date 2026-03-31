@@ -93,7 +93,8 @@ def index_document_to_vector_db(
             "original_filename": document.original_filename,
             "upload_date": document.upload_date.isoformat() if document.upload_date else None,
             "extraction_id": extraction.id,
-            "extraction_method": extraction.extraction_method
+            "extraction_method": extraction.extraction_method,
+            "is_patient_upload": bool(document.is_patient_upload),
         }
         
         # Add document to vector store

@@ -40,6 +40,14 @@ export default function PatientDocuments() {
   const [sharingDocId, setSharingDocId] = useState<number | null>(null)
   const [revokingDocId, setRevokingDocId] = useState<number | null>(null)
 
+  const ocrPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (ocrPollRef.current) clearInterval(ocrPollRef.current)
+    }
+  }, [])
+
   useEffect(() => {
     fetchDocuments()
   }, [session?.accessToken, filters.status, filters.document_type, page])
@@ -81,6 +89,13 @@ export default function PatientDocuments() {
     }
   }
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes == null || Number.isNaN(bytes)) return '—'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+  }
+
   const fetchEnrolledClinics = async () => {
     if (!session?.accessToken) return
     try {
@@ -105,19 +120,72 @@ export default function PatientDocuments() {
       if (uploadDocType) formData.append('document_type', uploadDocType)
       if (uploadNotes.trim()) formData.append('notes', uploadNotes.trim())
 
-      await api.post('/patient-dashboard/my-uploads', formData, {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          'Content-Type': 'multipart/form-data',
-        },
-      })
-      toast.success('Document uploaded successfully! Text extraction will begin shortly.')
+      const { data: uploadRes } = await api.post<{ document: Document }>(
+        '/patient-dashboard/my-uploads',
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      )
+      toast.success('Document uploaded. Extracting text in the background…')
       setUploadFile(null)
       setUploadDocType('')
       setUploadNotes('')
       setShowUploadForm(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
-      fetchDocuments()
+      await fetchDocuments()
+
+      const newDocId = uploadRes?.document?.id
+      if (newDocId) {
+        if (ocrPollRef.current) {
+          clearInterval(ocrPollRef.current)
+          ocrPollRef.current = null
+        }
+        let attempts = 0
+        const maxAttempts = 90
+        const tick = async () => {
+          attempts += 1
+          try {
+            if (!session?.accessToken) return
+            const { data: doc } = await api.get<Document>(`/documents/${newDocId}`, {
+              headers: { Authorization: `Bearer ${session.accessToken}` },
+            })
+            setDocuments((prev) =>
+              prev.some((d) => d.id === newDocId)
+                ? prev.map((d) => (d.id === newDocId ? { ...d, ...doc } : d))
+                : prev
+            )
+            if (
+              doc.status === DocumentStatus.PROCESSED ||
+              doc.status === DocumentStatus.FAILED
+            ) {
+              if (ocrPollRef.current) {
+                clearInterval(ocrPollRef.current)
+                ocrPollRef.current = null
+              }
+              await fetchDocuments()
+              if (doc.status === DocumentStatus.PROCESSED) {
+                toast.success('Text extraction complete. You can use View Text.')
+              } else {
+                toast.error('Text extraction failed for this document.')
+              }
+              return
+            }
+          } catch {
+            /* keep polling */
+          }
+          if (attempts >= maxAttempts && ocrPollRef.current) {
+            clearInterval(ocrPollRef.current)
+            ocrPollRef.current = null
+            await fetchDocuments()
+          }
+        }
+        void tick()
+        ocrPollRef.current = setInterval(() => void tick(), 2000)
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Failed to upload document')
     } finally {
@@ -276,7 +344,7 @@ export default function PatientDocuments() {
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
               <span>{getTypeDisplay(doc.document_type)}</span>
               <span>{doc.upload_date ? new Date(doc.upload_date).toLocaleDateString() : ''}</span>
-              <span>{(doc.file_size / 1024 / 1024).toFixed(2)} MB</span>
+              <span>{formatFileSize(doc.file_size)}</span>
             </div>
             {doc.notes && <p className="mt-1 text-sm text-gray-600">{doc.notes}</p>}
             {doc.status === DocumentStatus.FAILED && doc.processing_error && (

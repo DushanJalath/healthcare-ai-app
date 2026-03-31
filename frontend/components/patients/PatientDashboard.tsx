@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/router'
+import Link from 'next/link'
 import { Patient, Document, DocumentType, DocumentStatus, ShareLinkCreateResponse } from '@/types'
 import PatientStats from './PatientStats'
 import PatientTimeline from './PatientTimeline'
 import PatientDocuments from './PatientDocuments'
 import ClinicEnrollment from './ClinicEnrollment'
 import MediKeepChatWidget from './MediKeepChatWidget'
+import PremiumHealthChart from './PremiumHealthChart'
 import AuditLogViewer from '@/components/audit/AuditLogViewer'
 import Navbar from '@/components/layout/Navbar'
+import { usePremiumSubscription } from '@/hooks/usePremiumSubscription'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
 
@@ -48,12 +51,26 @@ interface PatientDashboardData {
   }>
 }
 
+type PatientTab =
+  | 'overview'
+  | 'health_trends'
+  | 'documents'
+  | 'timeline'
+  | 'profile'
+  | 'share'
+  | 'access'
+  | 'medications'
+  | 'clinics'
+
 export default function PatientDashboard() {
   const { data: session } = useSession()
   const router = useRouter()
+  const userKey = session?.user?.email ?? ''
+  const { isPremium, plan } = usePremiumSubscription(userKey)
+  const [premiumTabApplied, setPremiumTabApplied] = useState(false)
   const [dashboardData, setDashboardData] = useState<PatientDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'timeline' | 'profile' | 'share' | 'access' | 'medications' | 'clinics'>('overview')
+  const [activeTab, setActiveTab] = useState<PatientTab>('overview')
   const [selectedClinicId, setSelectedClinicId] = useState<number | null>(null)
   const [shareLink, setShareLink] = useState<string | null>(null)
   const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null)
@@ -94,12 +111,21 @@ export default function PatientDashboard() {
   })
   const [savingEntry, setSavingEntry] = useState(false)
 
-  const userKey = session?.user?.email || ''
-  const storageKey = (key: string) => userKey ? `${key}_${userKey}` : key
+  const storageKey = (key: string) => (userKey ? `${key}_${userKey}` : key)
 
   useEffect(() => {
     fetchDashboardData()
   }, [session?.accessToken, selectedClinicId])
+
+  useEffect(() => {
+    setPremiumTabApplied(false)
+  }, [userKey])
+
+  useEffect(() => {
+    if (!isPremium || premiumTabApplied) return
+    setActiveTab('health_trends')
+    setPremiumTabApplied(true)
+  }, [isPremium, premiumTabApplied])
 
   // Reset share state when user changes, then restore from per-user localStorage
   useEffect(() => {
@@ -496,22 +522,40 @@ export default function PatientDashboard() {
         clinics={clinics}
         selectedClinicId={selectedClinicId}
         onClinicChange={setSelectedClinicId}
+        patientPremium={
+          isPremium ? { variant: 'active' } : { variant: 'cta', href: '/patients/premium' }
+        }
       />
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow p-4 sm:p-6 text-white mb-6 sm:mb-8">
+        <div
+          className={`rounded-lg shadow p-4 sm:p-6 text-white mb-6 sm:mb-8 ${
+            isPremium
+              ? 'bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-700'
+              : 'bg-gradient-to-r from-blue-500 to-purple-600'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <h2 className="text-xl sm:text-2xl font-bold truncate">
-                Welcome, {dashboardData.patient_profile.user_first_name}!
-              </h2>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <h2 className="text-xl sm:text-2xl font-bold truncate">
+                  Welcome, {dashboardData.patient_profile.user_first_name}!
+                </h2>
+                {isPremium && (
+                  <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold backdrop-blur-sm">
+                    Premium{plan === 'annual' ? ' · Annual' : plan === 'monthly' ? ' · Monthly' : ''}
+                  </span>
+                )}
+              </div>
               <p className="mt-1 sm:mt-2 opacity-90 text-sm sm:text-base">
-                Here's an overview of your medical documents and health records
+                {isPremium
+                  ? 'Your premium dashboard: health trends, records, and assistant with premium model labels.'
+                  : "Here's an overview of your medical documents and health records"}
               </p>
             </div>
             <div className="text-4xl sm:text-6xl opacity-20 flex-shrink-0 ml-3">
-              🏥
+              {isPremium ? '✨' : '🏥'}
             </div>
           </div>
         </div>
@@ -530,6 +574,15 @@ export default function PatientDashboard() {
                 }`}
             >
               Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('health_trends')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${activeTab === 'health_trends'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Health trends{!isPremium ? ' · Premium' : ''}
             </button>
             <button
               onClick={() => setActiveTab('clinics')}
@@ -731,6 +784,38 @@ export default function PatientDashboard() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'health_trends' && (
+          <div className="space-y-6">
+            {isPremium ? (
+              <>
+                <PremiumHealthChart />
+                <div className="bg-white rounded-lg shadow p-6 border border-violet-100">
+                  <h3 className="text-md font-medium text-gray-900 mb-2">What you can define</h3>
+                  <p className="text-sm text-gray-600">
+                    Use the metric dropdown on the chart to focus on one type of result (for example blood glucose,
+                    blood pressure, heart rate, or weight). Values shown are demo data; connect real devices or lab
+                    imports in a future release.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-lg shadow p-8 text-center border border-amber-100">
+                <p className="text-lg font-semibold text-gray-900 mb-2">Health trends are a Premium feature</p>
+                <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
+                  See one health metric over time—such as blood sugar—and switch between metrics. Subscribe to unlock
+                  this tab and the premium assistant options in chat.
+                </p>
+                <Link
+                  href="/patients/premium"
+                  className="inline-flex items-center rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 text-sm font-semibold text-white shadow hover:from-amber-600 hover:to-orange-700"
+                >
+                  View plans
+                </Link>
+              </div>
+            )}
           </div>
         )}
 
@@ -1578,6 +1663,7 @@ export default function PatientDashboard() {
         patientId={dashboardData.patient_profile.id}
         accessToken={session?.accessToken ?? ''}
         hasDocuments={(dashboardData.stats.total_documents ?? 0) > 0}
+        isPremium={isPremium}
       />
     </div>
   )

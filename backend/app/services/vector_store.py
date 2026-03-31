@@ -17,6 +17,7 @@ import logging
 
 from ..database import SessionLocal
 from ..models.document_chunk import DocumentChunk
+from ..models.document import Document
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +263,10 @@ class VectorStoreService:
             
             query_obj = db.query(
                 DocumentChunk,
-                distance_expr
+                Document.is_patient_upload,
+                distance_expr,
+            ).join(
+                Document, DocumentChunk.document_id == Document.id
             ).filter(
                 DocumentChunk.patient_id == patient_id
             )
@@ -284,7 +288,7 @@ class VectorStoreService:
             
             # Format results
             chunks = []
-            for chunk, distance in results:
+            for chunk, is_patient_upload, distance in results:
                 # Calculate cosine similarity (1 - cosine distance)
                 # pgvector cosine_distance returns values from 0 to 2
                 # where 0 = identical, 1 = orthogonal, 2 = opposite
@@ -303,7 +307,8 @@ class VectorStoreService:
                         "document_type": chunk.document_type,
                         "original_filename": chunk.original_filename,
                         "upload_date": chunk.upload_date.isoformat() if chunk.upload_date else None,
-                        "extraction_method": chunk.extraction_method
+                        "extraction_method": chunk.extraction_method,
+                        "is_patient_upload": bool(is_patient_upload),
                     },
                     "distance": float(distance),
                     "similarity": float(similarity)

@@ -194,7 +194,6 @@ def _build_patient_knowledge_base(patient_id: int, db: Session) -> str:
             Extraction.status == ExtractionStatus.COMPLETED,
             Extraction.raw_text.isnot(None),
             Extraction.raw_text != "",
-            Document.is_patient_upload == False,
         )
         .order_by(desc(Document.upload_date))
         .all()
@@ -205,8 +204,8 @@ def _build_patient_knowledge_base(patient_id: int, db: Session) -> str:
         knowledge_parts.append("No medical documents have been uploaded yet.")
         return "\n".join(knowledge_parts)
     
-    # Add documents section
-    knowledge_parts.append("PATIENT'S MEDICAL DOCUMENTS (sorted by date, newest first):")
+    # Add documents section (clinic records and patient self-uploads)
+    knowledge_parts.append("PATIENT'S MEDICAL DOCUMENTS (clinic records and your uploads; sorted by date, newest first):")
     knowledge_parts.append("=" * 70)
     knowledge_parts.append("")
     knowledge_parts.append("IMPORTANT: When answering questions about time-sensitive data (like lab values, "
@@ -221,7 +220,9 @@ def _build_patient_knowledge_base(patient_id: int, db: Session) -> str:
         doc_name = document.original_filename or f"Document {document.id}"
         
         # Add document header
+        source = "Patient upload" if document.is_patient_upload else "Clinic record"
         knowledge_parts.append(f"--- Document {idx} ---")
+        knowledge_parts.append(f"Source: {source}")
         knowledge_parts.append(f"Date: {doc_date}")
         knowledge_parts.append(f"Type: {doc_type}")
         knowledge_parts.append(f"Filename: {doc_name}")
@@ -377,9 +378,15 @@ async def patient_ai_chat(
                     doc_type = metadata.get("document_type", "Unknown type")
                     doc_name = metadata.get("original_filename", f"Document {metadata.get('document_id')}")
                     similarity = chunk.get("similarity", 0)
+                    doc_source = (
+                        "Patient upload"
+                        if metadata.get("is_patient_upload")
+                        else "Clinic record"
+                    )
                     
                     knowledge_parts.append(f"--- Excerpt {idx} (Relevance: {similarity:.2%}) ---")
-                    knowledge_parts.append(f"Source: {doc_name}")
+                    knowledge_parts.append(f"Document source: {doc_source}")
+                    knowledge_parts.append(f"File: {doc_name}")
                     knowledge_parts.append(f"Date: {doc_date}")
                     knowledge_parts.append(f"Type: {doc_type}")
                     knowledge_parts.append("")
