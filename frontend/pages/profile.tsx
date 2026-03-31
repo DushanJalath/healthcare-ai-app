@@ -203,7 +203,8 @@ export default function ProfilePage() {
   const getDashboardHref = (): string => {
     const role = session?.user?.role
     if (role === UserRole.PATIENT) return '/patients/dashboard'
-    if (role === UserRole.CLINIC_ADMIN || role === UserRole.CLINIC_STAFF) return '/clinic/dashboard'
+    if (role === UserRole.CLINIC_ADMIN) return '/clinic/admin'
+    if (role === UserRole.CLINIC_STAFF) return '/clinic/dashboard'
     if (role === UserRole.ADMIN) return '/dashboard'
     return '/'
   }

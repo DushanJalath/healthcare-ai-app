@@ -50,4 +50,5 @@ def require_role(allowed_roles: list[UserRole]):
 # Common role dependencies
 require_admin = require_role([UserRole.ADMIN])
 require_clinic_access = require_role([UserRole.ADMIN, UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF])
+require_clinic_admin = require_role([UserRole.CLINIC_ADMIN])
 require_patient = require_role([UserRole.PATIENT])

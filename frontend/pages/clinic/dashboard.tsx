@@ -18,6 +18,12 @@ export default function ClinicDashboard() {
   const [stats, setStats] = useState<ClinicDashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
 
+  useEffect(() => {
+    if (session?.user?.role === UserRole.CLINIC_ADMIN) {
+      router.replace('/clinic/admin')
+    }
+  }, [session?.user?.role, router])
+
   const fetchDashboardData = useCallback(async () => {
     if (!session?.accessToken) return
 
@@ -34,12 +40,10 @@ export default function ClinicDashboard() {
   }, [session?.accessToken])
 
   useEffect(() => {
-    if (session?.accessToken) {
-      fetchDashboardData()
-    }
-    // fetchDashboardData is memoized with useCallback, safe to include
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.accessToken])
+    if (session?.user?.role !== UserRole.CLINIC_STAFF) return
+    if (!session?.accessToken) return
+    fetchDashboardData()
+  }, [session?.accessToken, session?.user?.role, fetchDashboardData])
 
   const handleQuickAction = (action: string) => {
     const actions: Record<string, string> = {
@@ -66,9 +70,21 @@ export default function ClinicDashboard() {
     }
   }
 
+  const clinicPortalRoles = [UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]
+
+  if (session?.user?.role === UserRole.CLINIC_ADMIN) {
+    return (
+      <ProtectedRoute allowedRoles={clinicPortalRoles}>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
   if (loading) {
     return (
-      <ProtectedRoute allowedRoles={[UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]}>
+      <ProtectedRoute allowedRoles={clinicPortalRoles}>
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
@@ -77,7 +93,7 @@ export default function ClinicDashboard() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]}>
+    <ProtectedRoute allowedRoles={[UserRole.CLINIC_STAFF]}>
       <Head>
         <title>Clinic Dashboard - MediKeep</title>
       </Head>

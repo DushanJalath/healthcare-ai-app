@@ -184,7 +184,8 @@ def send_patient_welcome_email(
         return False
     
     if not login_url:
-        login_url = f"{settings.frontend_url}"
+        base = settings.frontend_url.rstrip("/")
+        login_url = f"{base}/patient/login"
     
     try:
         # Create message
@@ -218,4 +219,79 @@ def send_patient_welcome_email(
         return False
     except Exception as e:
         logger.error(f"Unexpected error sending email to {to_email}: {str(e)}")
+        return False
+
+
+def send_clinic_staff_welcome_email(
+    to_email: str,
+    first_name: str,
+    password: str,
+    clinic_name: Optional[str] = None,
+    login_url: Optional[str] = None,
+) -> bool:
+    """Send clinic staff their email and temporary password; they sign in at the clinic portal."""
+    if not settings.smtp_username or not settings.smtp_password:
+        logger.warning("Email configuration not set. Email will not be sent.")
+        return False
+
+    base = settings.frontend_url.rstrip("/")
+    if not login_url:
+        login_url = f"{base}/clinic/login"
+
+    clinic_line = f"<p><strong>Clinic:</strong> {clinic_name}</p>" if clinic_name else ""
+    clinic_text = f"Clinic: {clinic_name}\n" if clinic_name else ""
+
+    html = f"""
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"></head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background-color: #2563eb; color: white; padding: 20px; text-align: center;">
+        <h1>Clinic staff account</h1>
+      </div>
+      <div style="background-color: #f9fafb; padding: 24px; border: 1px solid #e5e7eb;">
+        <p>Hello {first_name},</p>
+        <p>An administrator has created a clinic staff account for you. Use the credentials below to sign in at the <strong>clinic portal</strong> (same page as other clinic users).</p>
+        {clinic_line}
+        <div style="background: white; padding: 16px; margin: 16px 0; border-left: 4px solid #2563eb;">
+          <p><strong>Email:</strong> {to_email}</p>
+          <p><strong>Temporary password:</strong> <code style="font-size: 14px;">{password}</code></p>
+        </div>
+        <p style="background: #fef3c7; padding: 12px; border-radius: 6px;">Please change your password after first login.</p>
+        <p><a href="{login_url}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Open clinic sign in</a></p>
+      </div>
+      <p style="text-align: center; color: #6b7280; font-size: 12px;">This is an automated message.</p>
+    </body></html>
+    """
+
+    text = f"""Clinic staff account
+
+Hello {first_name},
+
+An administrator created a clinic staff account for you.
+{clinic_text}
+Email: {to_email}
+Temporary password: {password}
+
+Sign in: {login_url}
+
+Change your password after first login.
+"""
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Your clinic staff account — MediKeep"
+        msg["From"] = f"{settings.email_from_name} <{settings.email_from or settings.smtp_username}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP(settings.smtp_server, settings.smtp_port) as server:
+            server.starttls()
+            server.login(settings.smtp_username, settings.smtp_password)
+            server.send_message(msg)
+
+        logger.info(f"Staff welcome email sent to {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send staff welcome email to {to_email}: {e}")
         return False

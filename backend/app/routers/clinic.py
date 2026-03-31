@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, extract
 from typing import List, Dict, Any, Optional
@@ -10,12 +10,19 @@ from ..models.patient import Patient, Gender
 from ..models.patient_clinic import PatientClinic
 from ..models.document import Document, DocumentType, DocumentStatus
 from ..models.user import User, UserRole
-from ..models.audit_log import AuditLog
 from ..schemas.clinic import (
-    ClinicResponse, ClinicUpdate, ClinicDashboardStats, ClinicOverview
+    ClinicResponse,
+    ClinicUpdate,
+    ClinicDashboardStats,
+    ClinicOverview,
+    ClinicStaffRegisterRequest,
+    ClinicStaffUpdateRequest,
 )
 from ..schemas.user import UserResponse, user_response_from_user
-from ..utils.deps import get_current_active_user, require_clinic_access
+from ..utils.deps import require_clinic_access, require_clinic_admin
+from ..utils.auth import get_password_hash
+from ..utils.password import generate_secure_password
+from ..utils.email import send_clinic_staff_welcome_email
 
 def get_user_clinic(current_user: User, db: Session) -> Optional[Clinic]:
     """Get clinic for user (handles both clinic_admin and clinic_staff)."""
@@ -32,6 +39,29 @@ def get_user_clinic(current_user: User, db: Session) -> Optional[Clinic]:
             return clinic
     
     return None
+
+
+def _get_editable_clinic_staff(
+    staff_user_id: int,
+    clinic: Clinic,
+    db: Session,
+) -> User:
+    """Return clinic_staff user that belongs to this clinic, or raise HTTPException."""
+    target = db.query(User).filter(User.id == staff_user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.role != UserRole.CLINIC_STAFF:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account is not clinic staff",
+        )
+    if target.clinic_id != clinic.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This staff member is not in your clinic",
+        )
+    return target
+
 
 router = APIRouter(prefix="/clinic", tags=["clinic"])
 
@@ -67,8 +97,25 @@ async def update_clinic_profile(
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
     
-    # Update fields
+    # Update fields (license_number is the canonical value; staff/patients use clinic_id — changing
+    # license only affects public registration and display, not existing memberships.)
     update_data = clinic_update.dict(exclude_unset=True)
+    if "license_number" in update_data:
+        new_lic = update_data["license_number"]
+        taken = (
+            db.query(Clinic)
+            .filter(
+                Clinic.license_number == new_lic,
+                Clinic.id != clinic.id,
+            )
+            .first()
+        )
+        if taken:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This license number is already in use by another clinic",
+            )
+
     for field, value in update_data.items():
         setattr(clinic, field, value)
     
@@ -98,6 +145,17 @@ async def get_clinic_dashboard_stats(
         PatientClinic.clinic_id == clinic.id,
         PatientClinic.is_active == True
     ).distinct().count()
+
+    total_staff = (
+        db.query(User)
+        .filter(
+            User.clinic_id == clinic.id,
+            User.role == UserRole.CLINIC_STAFF,
+            User.is_active == True,
+        )
+        .count()
+    )
+
     total_documents = db.query(Document).filter(Document.clinic_id == clinic.id).count()
     
     # This month stats - use PatientClinic
@@ -146,6 +204,7 @@ async def get_clinic_dashboard_stats(
     
     return ClinicDashboardStats(
         total_patients=total_patients,
+        total_staff=total_staff,
         total_documents=total_documents,
         documents_this_month=documents_this_month,
         patients_this_month=patients_this_month,
@@ -198,6 +257,132 @@ async def get_clinic_users(
     ).order_by(User.created_at.desc()).all()
     
     return [user_response_from_user(user) for user in users]
+
+
+@router.get("/staff-members", response_model=List[UserResponse])
+async def get_clinic_staff_members(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_admin),
+):
+    """List clinic staff (excludes clinic admin) for the administrator's clinic."""
+    clinic = get_user_clinic(current_user, db)
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+
+    staff = (
+        db.query(User)
+        .filter(
+            User.clinic_id == clinic.id,
+            User.role == UserRole.CLINIC_STAFF,
+            User.is_active == True,
+        )
+        .order_by(User.created_at.desc())
+        .all()
+    )
+    return [user_response_from_user(u) for u in staff]
+
+
+@router.post("/staff", response_model=UserResponse)
+async def register_clinic_staff_by_admin(
+    body: ClinicStaffRegisterRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_admin),
+):
+    """
+    Clinic admin registers a staff member: ties them to the clinic when clinic_license
+    matches this clinic's license. Sends temporary password to the staff email.
+    """
+    clinic = get_user_clinic(current_user, db)
+    if not clinic or not clinic.is_active:
+        raise HTTPException(status_code=404, detail="Clinic not found or inactive")
+
+    if body.clinic_license.strip() != (clinic.license_number or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Clinic license number does not match your clinic. Enter your clinic's license to confirm.",
+        )
+
+    existing = db.query(User).filter(User.email == body.email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This email is already registered",
+        )
+
+    generated_password = generate_secure_password()
+    new_user = User(
+        email=body.email,
+        hashed_password=get_password_hash(generated_password),
+        first_name=body.first_name,
+        last_name=body.last_name,
+        role=UserRole.CLINIC_STAFF,
+        clinic_id=clinic.id,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    background_tasks.add_task(
+        send_clinic_staff_welcome_email,
+        to_email=body.email,
+        first_name=body.first_name,
+        password=generated_password,
+        clinic_name=clinic.name,
+    )
+
+    return user_response_from_user(new_user)
+
+
+@router.put("/staff/{staff_user_id}", response_model=UserResponse)
+async def update_clinic_staff_by_admin(
+    staff_user_id: int,
+    body: ClinicStaffUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_admin),
+):
+    """Clinic admin updates a staff member's name and email."""
+    clinic = get_user_clinic(current_user, db)
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+
+    target = _get_editable_clinic_staff(staff_user_id, clinic, db)
+    if not target.is_active:
+        raise HTTPException(status_code=400, detail="This staff account is inactive")
+
+    new_email = str(body.email).strip()
+    if new_email != target.email:
+        taken = db.query(User).filter(User.email == new_email, User.id != target.id).first()
+        if taken:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This email is already in use",
+            )
+        target.email = new_email
+
+    target.first_name = body.first_name
+    target.last_name = body.last_name
+    db.commit()
+    db.refresh(target)
+    return user_response_from_user(target)
+
+
+@router.delete("/staff/{staff_user_id}")
+async def delete_clinic_staff_by_admin(
+    staff_user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_admin),
+):
+    """Deactivate a clinic staff account (they can no longer sign in)."""
+    clinic = get_user_clinic(current_user, db)
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+
+    target = _get_editable_clinic_staff(staff_user_id, clinic, db)
+    target.is_active = False
+    db.commit()
+    return {"message": "Staff member removed from the clinic"}
+
 
 def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[Dict[str, Any]]:
     """Get recent clinic activity."""

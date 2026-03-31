@@ -71,12 +71,18 @@ export default function CreatePatientPage() {
                 />
 
                 <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-                    <div className="mb-6">
+                    <div className="mb-6 flex flex-wrap gap-4">
                         <Link
                             href="/clinic/users"
                             className="text-blue-600 hover:text-blue-800 inline-flex items-center"
                         >
                             ← Back to Patients
+                        </Link>
+                        <Link
+                            href={session?.user?.role === UserRole.CLINIC_ADMIN ? '/clinic/admin' : '/clinic/dashboard'}
+                            className="text-gray-600 hover:text-gray-800 inline-flex items-center text-sm"
+                        >
+                            Clinic home
                         </Link>
                     </div>
 

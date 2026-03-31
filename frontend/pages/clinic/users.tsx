@@ -168,10 +168,14 @@ export default function ClinicPatientsPage() {
               </p>
             </div>
             <button
-              onClick={() => router.push('/clinic/dashboard')}
+              onClick={() =>
+                router.push(
+                  session?.user?.role === UserRole.CLINIC_ADMIN ? '/clinic/admin' : '/clinic/dashboard'
+                )
+              }
               className="text-medical-600 hover:text-medical-700 font-medium self-start sm:self-auto"
             >
-              ← Back to Dashboard
+              ← Back to {session?.user?.role === UserRole.CLINIC_ADMIN ? 'Admin' : 'Staff'} portal
             </button>
           </div>
 

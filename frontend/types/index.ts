@@ -176,6 +176,7 @@ export interface Clinic {
   id: number
   name: string
   license_number: string
+  clinic_type?: string | null
   address?: string
   phone?: string
   email?: string
@@ -225,6 +226,7 @@ export interface PatientListResponse {
 // Clinic Dashboard Types
 export interface ClinicDashboardStats {
   total_patients: number
+  total_staff: number
   total_documents: number
   documents_this_month: number
   patients_this_month: number

@@ -70,7 +70,7 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       // Initial sign in
       if (user) {
         token.accessToken = user.accessToken
@@ -84,6 +84,17 @@ export const authOptions: NextAuthOptions = {
         token.clinicId = user.clinicId
         token.clinicLicenseNumber = user.clinicLicenseNumber
         token.clinicName = user.clinicName
+      }
+
+      // After clinic profile update (or other client `update()` calls)
+      if (trigger === 'update' && session && typeof session === 'object') {
+        const s = session as Record<string, unknown>
+        if ('clinicLicenseNumber' in s) {
+          token.clinicLicenseNumber = s.clinicLicenseNumber as string | null | undefined
+        }
+        if ('clinicName' in s) {
+          token.clinicName = s.clinicName as string | null | undefined
+        }
       }
 
       // Refresh access token if expired (within 1 min buffer)

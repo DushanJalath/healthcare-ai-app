@@ -17,7 +17,9 @@ export default function DashboardPage() {
       
       if (role === UserRole.PATIENT) {
         router.replace('/patients/dashboard')
-      } else if (role === UserRole.CLINIC_ADMIN || role === UserRole.CLINIC_STAFF) {
+      } else if (role === UserRole.CLINIC_ADMIN) {
+        router.replace('/clinic/admin')
+      } else if (role === UserRole.CLINIC_STAFF) {
         router.replace('/clinic/dashboard')
       } else if (role === UserRole.ADMIN) {
         // Admin stays on main dashboard or goes to admin dashboard

@@ -28,7 +28,8 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
 
   const getRedirectPathForRole = (role: string) => {
     if (role === UserRole.PATIENT) return '/patients/dashboard'
-    if (role === UserRole.CLINIC_ADMIN || role === UserRole.CLINIC_STAFF) return '/clinic/dashboard'
+    if (role === UserRole.CLINIC_ADMIN) return '/clinic/admin'
+    if (role === UserRole.CLINIC_STAFF) return '/clinic/dashboard'
     if (role === UserRole.ADMIN) return '/dashboard'
     return '/'
   }
