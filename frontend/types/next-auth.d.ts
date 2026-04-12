@@ -2,6 +2,8 @@ import NextAuth, { DefaultSession } from 'next-auth'
 
 declare module 'next-auth' {
   interface Session {
+    /** Set when JWT refresh fails; client should sign out and return to login. */
+    error?: string
     accessToken?: string
     user: {
       id: string
@@ -33,6 +35,7 @@ declare module 'next-auth' {
 
 declare module 'next-auth/jwt' {
   interface JWT {
+    error?: string
     accessToken?: string
     refreshToken?: string
     accessTokenExpires?: number

@@ -9,6 +9,7 @@ from .share_link import MedicalRecordShareLink
 from .document_chunk import DocumentChunk
 from .medical_history import MedicalHistoryEntry, MedicalEntryStatus
 from .notification import Notification, NotificationType
+from .patient_document_condition import PatientDocumentCondition
 
 __all__ = [
     "User",
@@ -25,4 +26,5 @@ __all__ = [
     "MedicalEntryStatus",
     "Notification",
     "NotificationType",
+    "PatientDocumentCondition",
 ]

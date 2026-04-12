@@ -6,6 +6,7 @@ import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import Navbar from '@/components/layout/Navbar'
 import DashboardStats from '@/components/clinic/DashboardStats'
+import ClinicInsightsChat from '@/components/clinic/ClinicInsightsChat'
 import RecentActivity from '@/components/clinic/RecentActivity'
 import SystemAlerts from '@/components/clinic/SystemAlerts'
 import { ClinicDashboardStats, UserRole } from '@/types'
@@ -95,15 +96,14 @@ export default function ClinicDashboard() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.CLINIC_STAFF]}>
       <Head>
-        <title>Clinic Dashboard - MediKeep</title>
+        <title>{session?.user?.clinicName ? `${session.user.clinicName} - MediKeep` : 'Clinic - MediKeep'}</title>
       </Head>
 
       <div className="min-h-screen bg-gray-50">
         {/* Header with Profile Dropdown */}
         <Navbar
-          title="Clinic Dashboard"
+          title={session?.user?.clinicName?.trim() || 'Clinic'}
           subtitle="Welcome back! Here's what's happening in your clinic."
-          clinicPremiumPromo
         />
 
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -111,6 +111,8 @@ export default function ClinicDashboard() {
             <>
               {/* Statistics Cards */}
               <DashboardStats stats={stats} />
+
+              {session?.accessToken && <ClinicInsightsChat accessToken={session.accessToken} />}
 
               {/* Quick Actions */}
               <div className="mb-8">

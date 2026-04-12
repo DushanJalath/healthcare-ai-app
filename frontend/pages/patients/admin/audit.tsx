@@ -20,7 +20,7 @@ export default function AuditLogsPage() {
           title="Audit Logs"
           subtitle="Track and monitor all system activities"
         />
-        <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        {/* <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           <div className="mb-6">
             <Link
               href="/dashboard"
@@ -30,7 +30,7 @@ export default function AuditLogsPage() {
             </Link>
           </div>
           <AuditLogViewer showFilters={true} />
-        </div>
+        </div> */}
       </div>
       
       <Toaster position="top-right" />

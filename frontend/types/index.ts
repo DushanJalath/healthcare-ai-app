@@ -162,6 +162,21 @@ export interface RAGChatResponse {
   used_top_k: number
 }
 
+/** Clinic staff / admin assistant: aggregate counts only (privacy-safe). */
+export interface ClinicInsightsChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface ClinicInsightsChatRequest {
+  question: string
+  chat_history?: ClinicInsightsChatTurn[]
+}
+
+export interface ClinicInsightsChatResponse {
+  answer: string
+}
+
 // Extraction Types
 export interface Extraction {
   id: number

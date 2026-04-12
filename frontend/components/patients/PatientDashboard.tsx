@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useSession, signOut } from 'next-auth/react'
-import { useRouter } from 'next/router'
+import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { Patient, Document, DocumentType, DocumentStatus, ShareLinkCreateResponse } from '@/types'
 import PatientStats from './PatientStats'
@@ -13,8 +12,10 @@ import AuditLogViewer from '@/components/audit/AuditLogViewer'
 import Navbar from '@/components/layout/Navbar'
 import DocumentExplanationsModal from '@/components/documents/DocumentExplanationsModal'
 import { usePremiumSubscription } from '@/hooks/usePremiumSubscription'
+import { formatPremiumAccessEnd } from '@/utils/premiumSubscription'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
+import { forceBrowserLogoutToLogin } from '@/utils/auth-cleanup'
 
 interface ShareLinkItem {
   id: number
@@ -54,7 +55,6 @@ interface PatientDashboardData {
 
 type PatientTab =
   | 'overview'
-  | 'health_trends'
   | 'documents'
   | 'timeline'
   | 'profile'
@@ -65,10 +65,8 @@ type PatientTab =
 
 export default function PatientDashboard() {
   const { data: session } = useSession()
-  const router = useRouter()
   const userKey = session?.user?.email ?? ''
-  const { isPremium, plan } = usePremiumSubscription(userKey)
-  const [premiumTabApplied, setPremiumTabApplied] = useState(false)
+  const { isPremium, plan, cancelAtPeriodEnd, currentPeriodEnd } = usePremiumSubscription(userKey)
   const [dashboardData, setDashboardData] = useState<PatientDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<PatientTab>('overview')
@@ -123,16 +121,6 @@ export default function PatientDashboard() {
   useEffect(() => {
     fetchDashboardData()
   }, [session?.accessToken, selectedClinicId])
-
-  useEffect(() => {
-    setPremiumTabApplied(false)
-  }, [userKey])
-
-  useEffect(() => {
-    if (!isPremium || premiumTabApplied) return
-    setActiveTab('health_trends')
-    setPremiumTabApplied(true)
-  }, [isPremium, premiumTabApplied])
 
   // Reset share state when user changes, then restore from per-user localStorage
   useEffect(() => {
@@ -193,20 +181,12 @@ export default function PatientDashboard() {
     }
   }, [activeTab, session?.accessToken])
 
-  // Helper function to clear session and redirect to landing page
-  const clearSessionAndRedirect = async () => {
-    // Clear localStorage
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('user')
-
-    // Sign out from NextAuth session and redirect to landing page
-    await signOut({ redirect: false })
-    router.push('/')
-  }
-
   const fetchDashboardData = async () => {
-    if (!session?.accessToken) return
+    if (!session?.accessToken) {
+      setLoading(false)
+      void forceBrowserLogoutToLogin()
+      return
+    }
 
     try {
       const params = new URLSearchParams()
@@ -224,8 +204,8 @@ export default function PatientDashboard() {
 
       // If patient profile not found (404) or access denied (403), clear session and redirect
       if (status === 404 || status === 403) {
-        toast.error('Patient profile not found. Redirecting to home page...')
-        await clearSessionAndRedirect()
+        toast.error('Patient profile not found. Redirecting to sign in...')
+        void forceBrowserLogoutToLogin()
         return
       }
 
@@ -604,8 +584,16 @@ export default function PatientDashboard() {
                   Welcome, {dashboardData.patient_profile.user_first_name}!
                 </h2>
                 {isPremium && (
-                  <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold backdrop-blur-sm">
-                    Premium{plan === 'annual' ? ' · Annual' : plan === 'monthly' ? ' · Monthly' : ''}
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold backdrop-blur-sm">
+                      Premium{plan === 'annual' ? ' · Annual' : plan === 'monthly' ? ' · Monthly' : ''}
+                    </span>
+                    <Link
+                      href="/patients/premium"
+                      className="text-xs font-semibold text-white/95 underline decoration-white/50 underline-offset-2 hover:text-white hover:decoration-white"
+                    >
+                      Manage subscription
+                    </Link>
                   </span>
                 )}
               </div>
@@ -621,6 +609,41 @@ export default function PatientDashboard() {
           </div>
         </div>
 
+        {/* Health trends — primary placement directly under welcome (navbar stays above) */}
+        <section
+          id="patient-health-trends"
+          className="mb-6 sm:mb-8 scroll-mt-6"
+          aria-label="Health trends"
+        >
+          {isPremium ? (
+            <PremiumHealthChart />
+          ) : (
+            <div className="bg-white rounded-lg shadow p-8 text-center border border-amber-100">
+              <p className="text-lg font-semibold text-gray-900 mb-2">Health trends are a Premium feature</p>
+              <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
+                See one health metric over time such as blood sugar and switch between metrics. Subscribe to unlock
+                this chart and the premium assistant options in chat.
+              </p>
+              <Link
+                href="/patients/premium"
+                className="inline-flex items-center rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 text-sm font-semibold text-white shadow hover:from-amber-600 hover:to-orange-700"
+              >
+                View plans
+              </Link>
+            </div>
+          )}
+        </section>
+
+        {isPremium && cancelAtPeriodEnd && currentPeriodEnd && (
+          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <span className="font-medium">Subscription ending:</span> Premium stays active until{' '}
+            {formatPremiumAccessEnd(currentPeriodEnd)}.{' '}
+            <Link href="/patients/premium" className="font-semibold text-amber-900 underline hover:text-amber-950">
+              Manage subscription
+            </Link>
+          </div>
+        )}
+
         {/* Quick Stats */}
         <PatientStats stats={dashboardData.stats} />
 
@@ -635,15 +658,6 @@ export default function PatientDashboard() {
                 }`}
             >
               Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('health_trends')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${activeTab === 'health_trends'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              Health trends{!isPremium ? ' · Premium' : ''}
             </button>
             <button
               onClick={() => setActiveTab('clinics')}
@@ -845,38 +859,6 @@ export default function PatientDashboard() {
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {activeTab === 'health_trends' && (
-          <div className="space-y-6">
-            {isPremium ? (
-              <>
-                <PremiumHealthChart />
-                <div className="bg-white rounded-lg shadow p-6 border border-violet-100">
-                  <h3 className="text-md font-medium text-gray-900 mb-2">What you can define</h3>
-                  <p className="text-sm text-gray-600">
-                    Use the metric dropdown on the chart to focus on one type of result (for example blood glucose,
-                    blood pressure, heart rate, or weight). Values shown are demo data; connect real devices or lab
-                    imports in a future release.
-                  </p>
-                </div>
-              </>
-            ) : (
-              <div className="bg-white rounded-lg shadow p-8 text-center border border-amber-100">
-                <p className="text-lg font-semibold text-gray-900 mb-2">Health trends are a Premium feature</p>
-                <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
-                  See one health metric over time such as blood sugar and switch between metrics. Subscribe to unlock
-                  this tab and the premium assistant options in chat.
-                </p>
-                <Link
-                  href="/patients/premium"
-                  className="inline-flex items-center rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 text-sm font-semibold text-white shadow hover:from-amber-600 hover:to-orange-700"
-                >
-                  View plans
-                </Link>
-              </div>
-            )}
           </div>
         )}
 

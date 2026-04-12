@@ -7,7 +7,7 @@ import { Toaster } from 'react-hot-toast'
 
 export default function PatientDashboardPage() {
   return (
-    <ProtectedRoute allowedRoles={[UserRole.PATIENT]}>
+    <ProtectedRoute allowedRoles={[UserRole.PATIENT]} redirectTo="/patient/login">
       <Head>
         <title>My Dashboard - MediKeep</title>
       </Head>

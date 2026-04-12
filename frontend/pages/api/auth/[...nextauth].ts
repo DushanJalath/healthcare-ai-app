@@ -30,7 +30,8 @@ export const authOptions: NextAuthOptions = {
           }, {
             headers: {
               'Content-Type': 'application/json'
-            }
+            },
+            timeout: 15_000
           })
 
           const { access_token, refresh_token, user, token_type } = response.data
@@ -100,24 +101,35 @@ export const authOptions: NextAuthOptions = {
       // Refresh access token if expired (within 1 min buffer)
       if (token.refreshToken && token.accessTokenExpires && Date.now() > token.accessTokenExpires - 60 * 1000) {
         try {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refresh_token: token.refreshToken
-          }, { headers: { 'Content-Type': 'application/json' } })
+          const response = await axios.post(
+            `${API_BASE_URL}/auth/refresh`,
+            { refresh_token: token.refreshToken },
+            { headers: { 'Content-Type': 'application/json' }, timeout: 10_000 }
+          )
           const { access_token, expires_in } = response.data
+          if (!access_token) {
+            throw new Error('No access_token in refresh response')
+          }
           token.accessToken = access_token
           token.accessTokenExpires = Date.now() + (expires_in ?? 1800) * 1000
-        } catch (err) {
-          // Refresh failed - clear token so user must re-login
+          delete token.error
+        } catch {
           token.accessToken = undefined
           token.refreshToken = undefined
           token.accessTokenExpires = undefined
+          token.error = 'RefreshAccessTokenError'
         }
       }
       return token
     },
     async session({ session, token }) {
+      if (token.error) {
+        session.error = token.error as string
+      } else {
+        delete session.error
+      }
       // Send properties to the client
-      session.accessToken = token.accessToken as string
+      session.accessToken = token.accessToken as string | undefined
       session.user.role = token.role as string
       session.user.isActive = token.isActive as boolean
       session.user.isVerified = token.isVerified as boolean

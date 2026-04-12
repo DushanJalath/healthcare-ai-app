@@ -35,6 +35,7 @@ from .routers.vector_management import router as vector_management_router
 from .routers.medical_history import router as medical_history_router
 from .routers.clinic_enrollment import router as clinic_enrollment_router
 from .routers.notifications import router as notifications_router
+from .routers.clinic_insights import router as clinic_insights_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -134,6 +135,7 @@ app.include_router(vector_management_router)
 app.include_router(medical_history_router)
 app.include_router(clinic_enrollment_router)
 app.include_router(notifications_router)
+app.include_router(clinic_insights_router)
 
 @app.get("/")
 async def root():

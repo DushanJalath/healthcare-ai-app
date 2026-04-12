@@ -6,6 +6,7 @@ import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import Navbar from '@/components/layout/Navbar'
 import DashboardStats from '@/components/clinic/DashboardStats'
+import ClinicInsightsChat from '@/components/clinic/ClinicInsightsChat'
 import RecentActivity from '@/components/clinic/RecentActivity'
 import SystemAlerts from '@/components/clinic/SystemAlerts'
 import { ClinicDashboardStats, UserRole } from '@/types'
@@ -77,20 +78,21 @@ export default function ClinicAdminPortal() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.CLINIC_ADMIN]}>
       <Head>
-        <title>Clinic Admin - MediKeep</title>
+        <title>{session?.user?.clinicName ? `${session.user.clinicName} - MediKeep` : 'Clinic Admin - MediKeep'}</title>
       </Head>
 
       <div className="min-h-screen bg-gray-50">
         <Navbar
-          title="Clinic admin portal"
-          subtitle={session?.user?.clinicName ? `${session.user.clinicName} — manage patients and staff` : 'Manage patients and staff for your clinic'}
-          clinicPremiumPromo
+          title={session?.user?.clinicName?.trim() || 'Clinic'}
+          subtitle="Manage patients and staff for your clinic"
         />
 
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           {stats && (
             <>
               <DashboardStats stats={stats} showStaffCount />
+
+              {session?.accessToken && <ClinicInsightsChat accessToken={session.accessToken} />}
 
               <div className="mb-8">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Admin actions</h2>

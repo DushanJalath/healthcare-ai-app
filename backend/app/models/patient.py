@@ -49,6 +49,12 @@ class Patient(Base):
         cascade="all, delete-orphan",
         order_by="desc(MedicalHistoryEntry.start_date)",
     )
+    document_conditions = relationship(
+        "PatientDocumentCondition",
+        back_populates="patient",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     
     # Helper properties for backward compatibility and convenience
     @property

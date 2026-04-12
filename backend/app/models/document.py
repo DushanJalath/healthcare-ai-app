@@ -45,3 +45,9 @@ class Document(Base):
     uploaded_by_user = relationship("User", foreign_keys=[uploaded_by_user_id])
     extractions = relationship("Extraction", back_populates="document")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan", passive_deletes=True)
+    document_conditions = relationship(
+        "PatientDocumentCondition",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

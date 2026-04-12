@@ -10,6 +10,7 @@ from ..database import SessionLocal
 logger = logging.getLogger(__name__)
 from ..models.document import Document, DocumentStatus
 from ..models.extraction import Extraction, ExtractionStatus
+from .document_conditions import persist_extracted_document_conditions
 from .ocr import extract_text
 from .vector_indexing import index_document_to_vector_db
 
@@ -66,7 +67,28 @@ def process_document_ocr(
         document.status = DocumentStatus.PROCESSED
         document.processed_date = datetime.now(timezone.utc)
 
+        patient_id_snapshot = document.patient_id
+        document_id_snapshot = document.id
+        extraction_id_snapshot = extraction.id
+
         db.commit()
+
+        try:
+            persist_extracted_document_conditions(
+                db,
+                patient_id=patient_id_snapshot,
+                document_id=document_id_snapshot,
+                extraction_id=extraction_id_snapshot,
+                raw_text=text,
+            )
+            db.commit()
+        except Exception as cond_err:
+            logger.exception(
+                "Failed to persist document-derived conditions document_id=%s: %s",
+                document_id_snapshot,
+                cond_err,
+            )
+            db.rollback()
 
         # Log extracted text to terminal (preview + full length)
         preview_len = 1500

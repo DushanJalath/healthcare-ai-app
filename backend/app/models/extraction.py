@@ -52,3 +52,8 @@ class Extraction(Base):
     # Relationships
     document = relationship("Document", back_populates="extractions")
     patient = relationship("Patient", back_populates="extractions")
+    document_conditions = relationship(
+        "PatientDocumentCondition",
+        back_populates="extraction",
+        passive_deletes=True,
+    )
