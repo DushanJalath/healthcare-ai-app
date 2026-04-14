@@ -14,16 +14,16 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
+        email: { label: 'Email or mobile number', type: 'text' },
         password: { label: 'Password', type: 'password' }
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Please enter your email and password')
+          throw new Error('Please enter your email or mobile number and password')
         }
 
         try {
-          // Call backend authentication endpoint
+          // Call backend authentication endpoint (legacy body key "email" maps to email_or_phone)
           const response = await axios.post(`${API_BASE_URL}/auth/login/json`, {
             email: credentials.email,
             password: credentials.password
@@ -39,7 +39,7 @@ export const authOptions: NextAuthOptions = {
           if (access_token && user) {
             return {
               id: user.id.toString(),
-              email: user.email,
+              email: user.email ?? user.phone ?? '',
               name: `${user.first_name} ${user.last_name}`,
               role: user.role,
               accessToken: access_token,
@@ -60,7 +60,7 @@ export const authOptions: NextAuthOptions = {
           console.error('Authentication error:', error.response?.data || error.message)
           
           if (error.response?.status === 401) {
-            throw new Error('Incorrect email or password')
+            throw new Error('Incorrect email/phone or password')
           } else if (error.response?.status === 400) {
             throw new Error(error.response.data?.detail || 'Invalid credentials')
           }

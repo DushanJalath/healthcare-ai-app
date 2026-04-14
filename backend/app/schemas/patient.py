@@ -52,19 +52,23 @@ class PatientCreate(PatientBase):
         return None
     
     @model_validator(mode='after')
-    def validate_email_with_names(self):
-        # If email is provided, first_name and last_name should also be provided
+    def validate_account_fields(self):
+        # Email account: names required. Phone-only account: phone + both names (otherwise phone is demographics only).
         email = self.email
         first_name = self.first_name
         last_name = self.last_name
-        
+        phone_set = bool(self.phone and str(self.phone).strip())
+
         if email:
             if not first_name or not last_name:
                 raise ValueError('first_name and last_name are required when email is provided')
-        elif first_name or last_name:
-            # If names are provided without email, that's also fine - email is optional
+        elif phone_set and first_name and last_name:
             pass
-            
+        elif phone_set and (not first_name or not last_name):
+            pass
+        elif first_name or last_name:
+            pass
+
         return self
 
 class PatientUpdate(BaseModel, SecurityValidatorMixin):
@@ -105,6 +109,7 @@ class PatientDetailResponse(PatientResponse):
     user_first_name: Optional[str] = None
     user_last_name: Optional[str] = None
     user_email: Optional[str] = None
+    user_phone: Optional[str] = None
     clinic_name: Optional[str] = None  # Deprecated: primary clinic name
     clinic_names: Optional[List[str]] = None  # New: list of clinic names from memberships
     documents_count: Optional[int] = 0

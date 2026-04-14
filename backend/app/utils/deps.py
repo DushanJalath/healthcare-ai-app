@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from ..database import get_db
 from ..models.user import User, UserRole
-from ..utils.auth import verify_token
+from ..utils.auth import verify_token, resolve_user_from_token_sub
 
 security = HTTPBearer()
+
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -20,11 +21,11 @@ def get_current_user(
     )
     
     token = credentials.credentials
-    email = verify_token(token)
-    if email is None:
+    sub = verify_token(token)
+    if sub is None:
         raise credentials_exception
     
-    user = db.query(User).filter(User.email == email).first()
+    user = resolve_user_from_token_sub(db, sub)
     if user is None:
         raise credentials_exception
     

@@ -8,7 +8,8 @@ export enum UserRole {
 
 export interface User {
   id: number
-  email: string
+  email: string | null
+  phone?: string | null
   first_name: string
   last_name: string
   role: UserRole
@@ -21,12 +22,13 @@ export interface User {
 }
 
 export interface LoginRequest {
-  email: string
+  email_or_phone: string
   password: string
 }
 
 export interface RegisterRequest {
-  email: string
+  email?: string | null
+  phone?: string | null
   password: string
   first_name: string
   last_name: string
@@ -275,6 +277,7 @@ export interface PatientDetailResponse extends Patient {
   user_first_name?: string
   user_last_name?: string
   user_email?: string
+  user_phone?: string
   clinic_name?: string  // Deprecated: primary clinic name for backward compatibility
   clinic_names?: string[]  // New: list of all clinic names patient is enrolled in
   clinic_ids?: number[]  // List of all clinic IDs patient is enrolled in

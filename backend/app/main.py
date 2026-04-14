@@ -65,6 +65,25 @@ if "extractions" in _insp.get_table_names():
             print("[OK] Added column extractions.explainer_view_cache")
 del _insp
 
+_insp = sa_inspect(engine)
+if "users" in _insp.get_table_names():
+    _user_cols = {c["name"] for c in _insp.get_columns("users")}
+    with engine.begin() as _conn:
+        if "phone" not in _user_cols:
+            _dialect = engine.dialect.name
+            if _dialect == "postgresql":
+                _conn.execute(sa_text("ALTER TABLE users ADD COLUMN phone VARCHAR"))
+                _conn.execute(
+                    sa_text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone_unique "
+                        "ON users (phone) WHERE phone IS NOT NULL"
+                    )
+                )
+            else:
+                _conn.execute(sa_text("ALTER TABLE users ADD COLUMN phone VARCHAR UNIQUE"))
+            print("[OK] Added column users.phone")
+del _insp
+
 # Create upload directory structure using absolute path
 # This ensures directories are created relative to the backend folder, not the current working directory
 backend_dir = _backend_dir

@@ -181,6 +181,11 @@ export default function PatientList({
                         {patient.user_email}
                       </div>
                     )}
+                    {!patient.user_email && patient.user_phone && (
+                      <div className="text-xs text-gray-500 mt-1" title="Login phone">
+                        {patient.user_phone}
+                      </div>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-4 text-sm text-gray-600">

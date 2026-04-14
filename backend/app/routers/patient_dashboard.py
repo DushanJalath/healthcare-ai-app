@@ -18,6 +18,7 @@ from ..schemas.document import DocumentResponse, DocumentUploadResponse
 from ..utils.deps import get_current_active_user
 from ..utils.file_handler import save_upload_file
 from ..utils.audit import get_audit_logger, AuditAction, AuditEntityType
+from ..utils.phone import is_placeholder_login_email
 
 router = APIRouter(prefix="/patient-dashboard", tags=["patient-dashboard"])
 
@@ -499,7 +500,12 @@ def _build_patient_detail(patient: Patient, db: Session):
         "updated_at": patient.updated_at,
         "user_first_name": patient.user.first_name if patient.user else None,
         "user_last_name": patient.user.last_name if patient.user else None,
-        "user_email": patient.user.email if patient.user else None,
+        "user_email": (
+            None
+            if (patient.user and is_placeholder_login_email(patient.user.email))
+            else (patient.user.email if patient.user else None)
+        ),
+        "user_phone": patient.user.phone if patient.user else None,
         "clinic_name": primary_clinic_name,  # Primary clinic for backward compatibility
         "clinic_names": clinic_names,  # All clinic names from memberships
         "documents_count": documents_count,

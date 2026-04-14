@@ -1,8 +1,12 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import bcrypt
 from jose import JWTError, jwt
+from sqlalchemy.orm import Session
 from ..config import settings
+
+if TYPE_CHECKING:
+    from ..models.user import User
 
 # bcrypt has a 72-byte limit; we truncate to bytes to avoid ValueError with bcrypt 4+
 BCRYPT_MAX_PASSWORD_BYTES = 72
@@ -57,29 +61,44 @@ def create_refresh_token(data: dict) -> str:
 
 
 def verify_token(token: str) -> Optional[str]:
-    """Verify JWT access token and return email."""
+    """Verify JWT access token and return subject (user id as string, or legacy email)."""
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         token_type = payload.get("type")
         if token_type is not None and token_type != "access":
             return None
-        email: str = payload.get("sub")
-        if email is None:
+        sub = payload.get("sub")
+        if sub is None:
             return None
-        return email
+        return str(sub)
     except JWTError:
         return None
 
 
 def verify_refresh_token(token: str) -> Optional[str]:
-    """Verify JWT refresh token and return email."""
+    """Verify JWT refresh token and return subject (user id as string, or legacy email)."""
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         if payload.get("type") != "refresh":
             return None
-        email: str = payload.get("sub")
-        if email is None:
+        sub = payload.get("sub")
+        if sub is None:
             return None
-        return email
+        return str(sub)
     except JWTError:
+        return None
+
+
+def resolve_user_from_token_sub(db: Session, sub: str) -> Optional["User"]:
+    """Resolve user from JWT sub (numeric user id, or legacy email string)."""
+    from ..models.user import User
+
+    if not sub:
+        return None
+    if "@" in sub:
+        return db.query(User).filter(User.email == sub).first()
+    try:
+        uid = int(sub)
+        return db.query(User).filter(User.id == uid).first()
+    except ValueError:
         return None

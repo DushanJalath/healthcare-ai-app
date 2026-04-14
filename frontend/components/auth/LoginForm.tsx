@@ -8,7 +8,7 @@ import Image from 'next/image'
 import { UserRole } from '@/types'
 
 interface LoginFormData {
-  email: string
+  emailOrPhone: string
   password: string
 }
 
@@ -45,13 +45,13 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
 
     try {
       const result = await signIn('credentials', {
-        email: data.email,
+        email: data.emailOrPhone,
         password: data.password,
         redirect: false
       })
 
       if (result?.error) {
-        toast.error('Invalid email or password')
+        toast.error('Invalid email/phone or password')
       } else {
         toast.success('Login successful!')
 
@@ -105,24 +105,21 @@ export default function LoginForm({ userType }: LoginFormProps = {}) {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
+              <label htmlFor="emailOrPhone" className="sr-only">
+                Email or mobile number
               </label>
               <input
-                {...register('email', {
-                  required: 'Email is required',
-                  pattern: {
-                    value: /^\S+@\S+$/i,
-                    message: 'Invalid email address'
-                  }
+                {...register('emailOrPhone', {
+                  required: 'Email or mobile number is required',
+                  minLength: { value: 3, message: 'Enter a valid email or phone number' }
                 })}
-                type="email"
-                autoComplete="email"
+                type="text"
+                autoComplete="username"
                 className="relative block w-full px-3 py-2 border border-gray-300 bg-white [color-scheme:light] placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-medical-500 focus:border-medical-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
+                placeholder="Email or mobile number"
               />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              {errors.emailOrPhone && (
+                <p className="mt-1 text-sm text-red-600">{errors.emailOrPhone.message}</p>
               )}
             </div>
 

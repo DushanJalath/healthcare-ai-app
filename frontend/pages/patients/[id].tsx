@@ -552,6 +552,12 @@ export default function PatientDetailPage() {
                         {patient.user_email || 'Not available'}
                       </p>
                     </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Login phone</label>
+                      <p className="mt-1 text-sm text-gray-900">
+                        {patient.user_phone || 'Not available'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 

@@ -103,7 +103,7 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
         <div className="bg-blue-50 p-6 rounded-lg shadow border border-blue-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information (Optional)</h3>
           <p className="text-sm text-gray-600 mb-4">
-            Provide patient email and name to automatically create a patient account. The patient will receive login credentials via email.
+            With email: credentials by email; if mobile is set below, also by SMS.
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -115,8 +115,13 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
                 {...register('first_name', {
                   validate: (value) => {
                     const email = watch('email')
-                    if (email && !value) {
+                    const phone = watch('phone')
+                    const wantPhoneAccount = !email?.trim() && !!phone?.trim()
+                    if (email?.trim() && !value) {
                       return 'First name is required when email is provided'
+                    }
+                    if (wantPhoneAccount && !value) {
+                      return 'First name is required for a phone-based account (with mobile in Basic Information)'
                     }
                     return true
                   }
@@ -138,8 +143,13 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
                 {...register('last_name', {
                   validate: (value) => {
                     const email = watch('email')
-                    if (email && !value) {
+                    const phone = watch('phone')
+                    const wantPhoneAccount = !email?.trim() && !!phone?.trim()
+                    if (email?.trim() && !value) {
                       return 'Last name is required when email is provided'
+                    }
+                    if (wantPhoneAccount && !value) {
+                      return 'Last name is required for a phone-based account (with mobile in Basic Information)'
                     }
                     return true
                   }
@@ -159,28 +169,32 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
               </label>
               <input
                 {...register('email', {
-                  pattern: {
-                    value: /^\S+@\S+$/i,
-                    message: 'Invalid email address'
-                  },
                   validate: (value) => {
                     const firstName = watch('first_name')
                     const lastName = watch('last_name')
-                    if (value && (!firstName || !lastName)) {
+                    const phone = watch('phone')
+                    const v = (value || '').trim()
+                    if (v && !/^\S+@\S+$/i.test(v)) {
+                      return 'Invalid email address'
+                    }
+                    if (v && (!firstName?.trim() || !lastName?.trim())) {
                       return 'First name and last name are required when email is provided'
+                    }
+                    if (!v && phone?.trim() && (!firstName?.trim() || !lastName?.trim())) {
+                      return 'First and last name are required when using phone-only account'
                     }
                     return true
                   }
                 })}
                 type="email"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="patient@example.com"
+                placeholder="patient@example.com (optional if phone-only)"
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
               )}
               <p className="mt-1 text-xs text-gray-500">
-                Patient will receive login credentials via email
+                With email: credentials by email; if mobile is set below, also by SMS.
               </p>
             </div>
           </div>
@@ -255,6 +269,16 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
                 pattern: {
                   value: /^[\+]?[\d\s\-\(\)]+$/,
                   message: 'Invalid phone number format'
+                },
+                validate: () => {
+                  const email = watch('email')
+                  const phone = watch('phone')
+                  const fn = watch('first_name')
+                  const ln = watch('last_name')
+                  if (!email?.trim() && phone?.trim() && (!fn?.trim() || !ln?.trim())) {
+                    return 'Enter first and last name in Account Information for phone-based login'
+                  }
+                  return true
                 }
               })}
               type="tel"

@@ -23,6 +23,8 @@ from ..utils.deps import get_current_active_user, require_clinic_access
 from ..utils.auth import get_password_hash
 from ..utils.password import generate_secure_password
 from ..utils.email import send_patient_welcome_email
+from ..utils.phone import parse_to_e164, placeholder_email_for_phone_account, is_placeholder_login_email
+from ..utils.sms import send_patient_credentials_sms
 from ..services.vector_store import get_vector_store
 
 router = APIRouter(prefix="/patients", tags=["patients"])
@@ -155,8 +157,10 @@ def _build_patient_knowledge_base(patient_id: int, db: Session) -> str:
     if patient.phone:
         knowledge_parts.append(f"Phone: {patient.phone}")
     
-    if patient.user and patient.user.email:
+    if patient.user and patient.user.email and not is_placeholder_login_email(patient.user.email):
         knowledge_parts.append(f"Email: {patient.user.email}")
+    if patient.user and patient.user.phone:
+        knowledge_parts.append(f"Phone: {patient.user.phone}")
     
     if patient.address:
         knowledge_parts.append(f"Address: {patient.address}")
@@ -531,58 +535,122 @@ async def create_patient(
     if not clinic.is_active:
         raise HTTPException(status_code=400, detail="Clinic is not active")
     
-    # Handle user account creation/lookup if email is provided
+    # Handle user account creation/lookup (email and/or phone)
     user_id = patient_data.user_id
     generated_password = None
     existing_user = None
-    
-    if patient_data.email:
-        # Check if user with this email already exists
+    e164_phone = parse_to_e164(patient_data.phone) if patient_data.phone else None
+
+    account_by_email = bool(patient_data.email) and not patient_data.user_id
+    account_by_phone_only = (
+        not patient_data.user_id
+        and not patient_data.email
+        and bool(e164_phone)
+        and bool(patient_data.first_name and patient_data.last_name)
+    )
+
+    user_resolved_via_account = False
+
+    if account_by_email:
+        user_resolved_via_account = True
         existing_user = db.query(User).filter(User.email == patient_data.email).first()
         if existing_user:
-            # Check if this user is already a patient
             if existing_user.role != UserRole.PATIENT:
                 raise HTTPException(
-                    status_code=400, 
-                    detail=f"User with email {patient_data.email} already exists with role {existing_user.role}"
+                    status_code=400,
+                    detail=f"User with email {patient_data.email} already exists with role {existing_user.role}",
                 )
-            # Use existing user
             user_id = existing_user.id
+            if e164_phone:
+                dup_phone = (
+                    db.query(User)
+                    .filter(User.phone == e164_phone, User.id != existing_user.id)
+                    .first()
+                )
+                if dup_phone:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="This phone number is already linked to another account",
+                    )
+                existing_user.phone = e164_phone
         else:
-            # Create new user account for patient
             if not patient_data.first_name or not patient_data.last_name:
                 raise HTTPException(
                     status_code=400,
-                    detail="first_name and last_name are required when email is provided"
+                    detail="first_name and last_name are required when email is provided",
                 )
-            
-            # Generate secure password
+            if e164_phone:
+                dup_phone = db.query(User).filter(User.phone == e164_phone).first()
+                if dup_phone:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="This phone number is already registered to another user",
+                    )
             generated_password = generate_secure_password()
             hashed_password = get_password_hash(generated_password)
-            
-            # Create user account
             new_user = User(
-                email=patient_data.email,
+                email=str(patient_data.email).lower(),
+                phone=e164_phone,
                 hashed_password=hashed_password,
                 first_name=patient_data.first_name,
                 last_name=patient_data.last_name,
                 role=UserRole.PATIENT,
-                clinic_id=None  # Patients don't belong to a clinic directly
+                clinic_id=None,
             )
             db.add(new_user)
-            db.flush()  # Flush to get the user ID
+            db.flush()
             user_id = new_user.id
-            
-            # Schedule email sending in background
             background_tasks.add_task(
                 send_patient_welcome_email,
-                to_email=patient_data.email,
+                to_email=str(patient_data.email),
                 first_name=patient_data.first_name,
-                password=generated_password
+                password=generated_password,
+            )
+            if e164_phone:
+                background_tasks.add_task(
+                    send_patient_credentials_sms,
+                    to_e164=e164_phone,
+                    login_hint=str(patient_data.email),
+                    password=generated_password,
+                    first_name=patient_data.first_name,
+                )
+
+    elif account_by_phone_only:
+        user_resolved_via_account = True
+        existing_user = db.query(User).filter(User.phone == e164_phone).first()
+        if existing_user:
+            if existing_user.role != UserRole.PATIENT:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This phone number is already registered to a non-patient account",
+                )
+            user_id = existing_user.id
+        else:
+            generated_password = generate_secure_password()
+            hashed_password = get_password_hash(generated_password)
+            placeholder_email = placeholder_email_for_phone_account()
+            new_user = User(
+                email=placeholder_email,
+                phone=e164_phone,
+                hashed_password=hashed_password,
+                first_name=patient_data.first_name,
+                last_name=patient_data.last_name,
+                role=UserRole.PATIENT,
+                clinic_id=None,
+            )
+            db.add(new_user)
+            db.flush()
+            user_id = new_user.id
+            background_tasks.add_task(
+                send_patient_credentials_sms,
+                to_e164=e164_phone,
+                login_hint=e164_phone,
+                password=generated_password,
+                first_name=patient_data.first_name,
             )
     
-    # Validate user association if provided (but not created above)
-    if patient_data.user_id and not patient_data.email:
+    # Validate user association if provided (explicit link, not handled by account creation above)
+    if patient_data.user_id and not patient_data.email and not user_resolved_via_account:
         user = db.query(User).filter(
             User.id == patient_data.user_id,
             User.role == UserRole.PATIENT
@@ -1011,10 +1079,12 @@ def _build_patient_detail_optimized(
     response_data["clinic_ids"] = clinic_ids
     
     # Add additional details
+    uemail = patient.user.email if patient.user else None
     response_data.update({
         "user_first_name": patient.user.first_name if patient.user else None,
         "user_last_name": patient.user.last_name if patient.user else None,
-        "user_email": patient.user.email if patient.user else None,
+        "user_email": None if is_placeholder_login_email(uemail) else uemail,
+        "user_phone": patient.user.phone if patient.user else None,
         "clinic_name": primary_clinic_name,  # Primary clinic for backward compatibility
         "clinic_names": clinic_names,  # All clinic names
         "documents_count": documents_count,

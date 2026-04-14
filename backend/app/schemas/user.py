@@ -52,14 +52,34 @@ class UserUpdate(BaseModel, SecurityValidatorMixin):
     def validate_last_name(cls, v):
         return SecureTextValidator.sanitize_name(v) if v else None
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
+    """API user shape; email may be absent for phone-only patients (internal placeholder hidden)."""
     id: int
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    first_name: str
+    last_name: str
+    role: UserRole
     is_active: bool
     is_verified: bool
     created_at: datetime
     clinic_id: Optional[int] = None
     clinic_license_number: Optional[str] = None
-    clinic_name: Optional[str] = None  # associated clinic display name (when user belongs to a clinic)
+    clinic_name: Optional[str] = None
+
+    @validator("first_name")
+    def validate_first_name(cls, v):
+        return SecureTextValidator.sanitize_name(v)
+
+    @validator("last_name")
+    def validate_last_name(cls, v):
+        return SecureTextValidator.sanitize_name(v)
+
+    @validator("email")
+    def validate_email_when_present(cls, v):
+        if v is None or not str(v).strip():
+            return None
+        return SecureTextValidator.validate_email_field(str(v))
 
     class Config:
         from_attributes = True
@@ -67,6 +87,8 @@ class UserResponse(UserBase):
 
 def user_response_from_user(user) -> UserResponse:
     """Build UserResponse including clinic license/name when the user has a clinic (loads clinic if needed)."""
+    from ..utils.phone import is_placeholder_login_email
+
     license_num: Optional[str] = None
     clinic_display_name: Optional[str] = None
     if getattr(user, "clinic_id", None):
@@ -75,9 +97,13 @@ def user_response_from_user(user) -> UserResponse:
             license_num = clinic.license_number
             clinic_display_name = clinic.name
 
+    raw_email = getattr(user, "email", None)
+    display_email = None if is_placeholder_login_email(raw_email) else raw_email
+
     return UserResponse(
         id=user.id,
-        email=user.email,
+        email=display_email,
+        phone=getattr(user, "phone", None),
         first_name=user.first_name,
         last_name=user.last_name,
         role=user.role,
@@ -90,7 +116,7 @@ def user_response_from_user(user) -> UserResponse:
     )
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email_or_phone: str
     password: str
 
 class ChangePasswordRequest(BaseModel):

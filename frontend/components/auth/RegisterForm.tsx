@@ -9,6 +9,7 @@ import { UserRole } from '@/types'
 
 interface RegisterFormData {
   email: string
+  phone: string
   password: string
   confirmPassword: string
   first_name: string
@@ -27,7 +28,9 @@ export default function RegisterForm() {
     handleSubmit,
     watch,
     formState: { errors }
-  } = useForm<RegisterFormData>()
+  } = useForm<RegisterFormData>({
+    defaultValues: { email: '', phone: '' }
+  })
 
   const watchRole = watch('role')
   const watchPassword = watch('password')
@@ -36,15 +39,20 @@ export default function RegisterForm() {
     setIsLoading(true)
 
     try {
-      await api.post('/auth/register', {
-        email: data.email,
+      const payload: Record<string, unknown> = {
         password: data.password,
         first_name: data.first_name,
         last_name: data.last_name,
         role: data.role,
         clinic_name: data.clinic_name,
         clinic_license: data.clinic_license
-      })
+      }
+      const emailTrim = data.email?.trim()
+      const phoneTrim = data.phone?.trim()
+      if (emailTrim) payload.email = emailTrim
+      if (phoneTrim) payload.phone = phoneTrim
+
+      await api.post('/auth/register', payload)
 
       toast.success('Account created successfully! Please login.')
       router.push('/')
@@ -115,14 +123,23 @@ export default function RegisterForm() {
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email Address
+                Email {watchRole === UserRole.PATIENT ? '(optional if mobile provided)' : ''}
               </label>
               <input
                 {...register('email', {
-                  required: 'Email is required',
-                  pattern: {
-                    value: /^\S+@\S+$/i,
-                    message: 'Invalid email address'
+                  validate: (value) => {
+                    const role = watch('role')
+                    const phoneVal = watch('phone')
+                    const e = (value || '').trim()
+                    const p = (phoneVal || '').trim()
+                    if (role === UserRole.PATIENT) {
+                      if (!e && !p) return 'Enter an email or a mobile number'
+                      if (e && !/^\S+@\S+$/i.test(e)) return 'Invalid email address'
+                      return true
+                    }
+                    if (!e) return 'Email is required'
+                    if (!/^\S+@\S+$/i.test(e)) return 'Invalid email address'
+                    return true
                   }
                 })}
                 type="email"
@@ -132,6 +149,34 @@ export default function RegisterForm() {
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
               )}
             </div>
+
+            {watchRole === UserRole.PATIENT && (
+              <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                  Mobile number (optional if email provided)
+                </label>
+                <input
+                  {...register('phone', {
+                    validate: (value) => {
+                      const role = watch('role')
+                      if (role !== UserRole.PATIENT) return true
+                      const e = (watch('email') || '').trim()
+                      const p = (value || '').trim()
+                      if (!e && !p) return 'Enter an email or a mobile number'
+                      if (p && !/^[+]?[\d\s\-()]+$/.test(p)) return 'Invalid phone format'
+                      return true
+                    }
+                  })}
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="+1 555 123 4567"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white [color-scheme:light] text-gray-900 focus:outline-none focus:ring-medical-500 focus:border-medical-500"
+                />
+                {errors.phone && (
+                  <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
+                )}
+              </div>
+            )}
 
             <div>
               <label htmlFor="role" className="block text-sm font-medium text-gray-700">

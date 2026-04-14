@@ -190,6 +190,9 @@ bleach
 # Phone number validation
 phonenumbers
 
+# SMS (Twilio)
+twilio
+
 # Geographic data
 geopy
 

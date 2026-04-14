@@ -242,6 +242,9 @@ export default function ClinicPatientsPage() {
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-900">{patient.phone || 'N/A'}</div>
                           {patient.user_email && <div className="text-sm text-gray-600 truncate max-w-xs" title={patient.user_email}>{patient.user_email}</div>}
+                          {!patient.user_email && patient.user_phone && (
+                            <div className="text-sm text-gray-600 truncate max-w-xs" title="Login phone">{patient.user_phone}</div>
+                          )}
                           {patient.address && <div className="text-sm text-gray-500 truncate max-w-xs" title={patient.address}>{patient.address}</div>}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -299,6 +302,9 @@ export default function ClinicPatientsPage() {
 
                   {patient.user_email && (
                     <p className="text-xs text-gray-500 truncate mb-3">{patient.user_email}</p>
+                  )}
+                  {!patient.user_email && patient.user_phone && (
+                    <p className="text-xs text-gray-500 truncate mb-3">{patient.user_phone}</p>
                   )}
 
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">

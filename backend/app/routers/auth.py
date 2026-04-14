@@ -9,7 +9,15 @@ from ..models.clinic import Clinic
 from ..models.patient import Patient
 from ..schemas.auth import LoginRequest, RegisterRequest
 from ..schemas.user import Token, UserResponse, RefreshTokenRequest, RefreshTokenResponse, user_response_from_user
-from ..utils.auth import verify_password, get_password_hash, create_access_token, create_refresh_token, verify_refresh_token
+from ..utils.auth import (
+    verify_password,
+    get_password_hash,
+    create_access_token,
+    create_refresh_token,
+    verify_refresh_token,
+    resolve_user_from_token_sub,
+)
+from ..utils.phone import parse_to_e164, placeholder_email_for_phone_account, find_user_by_login_identifier
 from ..utils.deps import get_current_active_user
 from ..config import settings
 
@@ -21,13 +29,37 @@ async def register(
     db: Session = Depends(get_db)
 ):
     """Register a new user."""
-    # Check if user exists
-    db_user = db.query(User).filter(User.email == user_data.email).first()
-    if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+    patient_phone_e164 = (
+        parse_to_e164(user_data.phone)
+        if user_data.role == UserRole.PATIENT and user_data.phone
+        else None
+    )
+
+    if user_data.email:
+        db_user = db.query(User).filter(User.email == str(user_data.email).lower()).first()
+        if db_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
+
+    if patient_phone_e164:
+        existing_phone = db.query(User).filter(User.phone == patient_phone_e164).first()
+        if existing_phone:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already registered",
+            )
+
+    if user_data.role == UserRole.PATIENT and not user_data.email:
+        email_to_store = placeholder_email_for_phone_account()
+    else:
+        if not user_data.email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email is required for this account type",
+            )
+        email_to_store = str(user_data.email).lower()
     
     # Validate clinic license for clinic staff
     clinic_id = None
@@ -54,7 +86,8 @@ async def register(
     # Create user
     hashed_password = get_password_hash(user_data.password)
     db_user = User(
-        email=user_data.email,
+        email=email_to_store,
+        phone=patient_phone_e164,
         hashed_password=hashed_password,
         first_name=user_data.first_name,
         last_name=user_data.last_name,
@@ -93,7 +126,8 @@ async def register(
         patient_id = f"PAT-{uuid.uuid4().hex[:8].upper()}"
         db_patient = Patient(
             user_id=db_user.id,
-            patient_id=patient_id
+            patient_id=patient_id,
+            phone=patient_phone_e164,
         )
         db.add(db_patient)
         db.commit()
@@ -106,12 +140,12 @@ async def login(
     db: Session = Depends(get_db)
 ):
     """Authenticate user and return access token."""
-    user = db.query(User).filter(User.email == form_data.username).first()
+    user = find_user_by_login_identifier(db, form_data.username)
     
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect email/phone or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -122,10 +156,11 @@ async def login(
         )
     
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    sub = str(user.id)
     access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={"sub": sub}, expires_delta=access_token_expires
     )
-    refresh_token = create_refresh_token(data={"sub": user.email})
+    refresh_token = create_refresh_token(data={"sub": sub})
     
     return {
         "access_token": access_token,
@@ -142,13 +177,13 @@ async def refresh_access_token(
     db: Session = Depends(get_db)
 ):
     """Exchange refresh token for new access token to persist session."""
-    email = verify_refresh_token(refresh_data.refresh_token)
-    if not email:
+    sub = verify_refresh_token(refresh_data.refresh_token)
+    if not sub:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
         )
-    user = db.query(User).filter(User.email == email).first()
+    user = resolve_user_from_token_sub(db, sub)
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -156,7 +191,7 @@ async def refresh_access_token(
         )
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
     )
     return {
         "access_token": access_token,
@@ -171,12 +206,12 @@ async def login_json(
     db: Session = Depends(get_db)
 ):
     """JSON login endpoint for frontend."""
-    user = db.query(User).filter(User.email == login_data.email).first()
+    user = find_user_by_login_identifier(db, login_data.email_or_phone.strip())
     
     if not user or not verify_password(login_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+            detail="Incorrect email/phone or password"
         )
     
     if not user.is_active:
@@ -186,10 +221,11 @@ async def login_json(
         )
     
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    sub = str(user.id)
     access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={"sub": sub}, expires_delta=access_token_expires
     )
-    refresh_token = create_refresh_token(data={"sub": user.email})
+    refresh_token = create_refresh_token(data={"sub": sub})
     
     return {
         "access_token": access_token,
