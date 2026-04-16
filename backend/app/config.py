@@ -17,11 +17,12 @@ class Settings(BaseSettings):
     email_from_name: str = "Healthcare AI System"
     frontend_url: str = "http://localhost:3000"  # For login links in emails
 
-    # Twilio (SMS for patient credentials). Optional until configured.
-    twilio_account_sid: Optional[str] = None
-    twilio_auth_token: Optional[str] = None
-    twilio_from_number: Optional[str] = None  # E.164, e.g. +15551234567
-    default_phone_region: str = "US"  # ISO region for parsing national numbers
+    # Text.lk SMS (Sri Lanka) — patient credential messages. Optional until configured.
+    # Token from app.text.lk → Developers. sender_id = approved sender name or number (see Text.lk docs).
+    textlk_api_token: Optional[str] = None
+    textlk_sender_id: Optional[str] = None
+    textlk_sms_send_url: str = "https://app.text.lk/api/v3/sms/send"
+    default_phone_region: str = "LK"  # ISO region for parsing national numbers (Sri Lanka)
 
     class Config:
         env_file = ".env"

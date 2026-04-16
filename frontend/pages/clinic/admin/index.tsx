@@ -6,6 +6,7 @@ import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import Navbar from '@/components/layout/Navbar'
 import DashboardStats from '@/components/clinic/DashboardStats'
+import PatientPhoneLookup from '@/components/clinic/PatientPhoneLookup'
 import ClinicInsightsChat from '@/components/clinic/ClinicInsightsChat'
 import RecentActivity from '@/components/clinic/RecentActivity'
 import SystemAlerts from '@/components/clinic/SystemAlerts'
@@ -138,6 +139,8 @@ export default function ClinicAdminPortal() {
                   </button>
                 </div>
               </div>
+
+              {session?.accessToken && <PatientPhoneLookup accessToken={session.accessToken} />}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <RecentActivity activities={stats.recent_activity} />

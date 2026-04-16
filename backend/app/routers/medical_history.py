@@ -266,3 +266,87 @@ async def create_patient_medical_history_entry(
         db.commit()
 
     return _entry_to_response(entry)
+
+
+@router.put("/patient/{patient_id}/entry/{entry_id}", response_model=MedicalHistoryEntryResponse)
+async def update_patient_medical_history_entry(
+    patient_id: int,
+    entry_id: int,
+    payload: MedicalHistoryEntryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_access),
+):
+    """Clinic staff updates a medical history entry for a patient."""
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+    clinic_id = clinic.id if clinic else None
+
+    if clinic_id:
+        membership = db.query(PatientClinic).filter(
+            PatientClinic.patient_id == patient.id,
+            PatientClinic.clinic_id == clinic_id,
+            PatientClinic.is_active == True,
+        ).first()
+        if not membership and current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Patient is not enrolled in your clinic")
+
+    entry = (
+        db.query(MedicalHistoryEntry)
+        .filter(
+            MedicalHistoryEntry.id == entry_id,
+            MedicalHistoryEntry.patient_id == patient.id,
+        )
+        .first()
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Medical history entry not found")
+
+    update_data = payload.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(entry, field, value)
+
+    db.commit()
+    db.refresh(entry)
+    return _entry_to_response(entry)
+
+
+@router.delete("/patient/{patient_id}/entry/{entry_id}", status_code=204)
+async def delete_patient_medical_history_entry(
+    patient_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_clinic_access),
+):
+    """Clinic staff deletes a medical history entry for a patient."""
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    clinic = db.query(Clinic).filter(Clinic.admin_user_id == current_user.id).first()
+    clinic_id = clinic.id if clinic else None
+
+    if clinic_id:
+        membership = db.query(PatientClinic).filter(
+            PatientClinic.patient_id == patient.id,
+            PatientClinic.clinic_id == clinic_id,
+            PatientClinic.is_active == True,
+        ).first()
+        if not membership and current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Patient is not enrolled in your clinic")
+
+    entry = (
+        db.query(MedicalHistoryEntry)
+        .filter(
+            MedicalHistoryEntry.id == entry_id,
+            MedicalHistoryEntry.patient_id == patient.id,
+        )
+        .first()
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Medical history entry not found")
+
+    db.delete(entry)
+    db.commit()

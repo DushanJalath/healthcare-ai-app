@@ -23,6 +23,7 @@ from ..utils.deps import require_clinic_access, require_clinic_admin
 from ..utils.auth import get_password_hash
 from ..utils.password import generate_secure_password
 from ..utils.email import send_clinic_staff_welcome_email
+from ..services.data_purge import purge_clinic_staff_user
 
 def get_user_clinic(current_user: User, db: Session) -> Optional[Clinic]:
     """Get clinic for user (handles both clinic_admin and clinic_staff)."""
@@ -373,15 +374,26 @@ async def delete_clinic_staff_by_admin(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_clinic_admin),
 ):
-    """Deactivate a clinic staff account (they can no longer sign in)."""
+    """Permanently delete a clinic staff account and their user-scoped data (audit logs, notifications)."""
     clinic = get_user_clinic(current_user, db)
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
 
     target = _get_editable_clinic_staff(staff_user_id, clinic, db)
-    target.is_active = False
+    reassign_creator = clinic.admin_user_id or current_user.id
+    try:
+        purge_clinic_staff_user(
+            db,
+            target,
+            reassign_medical_history_creator_id=reassign_creator,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account cannot be deleted as staff",
+        )
     db.commit()
-    return {"message": "Staff member removed from the clinic"}
+    return {"message": "Staff member and their account data have been permanently deleted"}
 
 
 def _get_recent_activity(clinic_id: int, db: Session, limit: int = 10) -> List[Dict[str, Any]]:

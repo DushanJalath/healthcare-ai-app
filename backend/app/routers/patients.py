@@ -5,6 +5,9 @@ from typing import List, Optional, Literal, Dict, Any
 from datetime import datetime, timedelta, date
 from pydantic import BaseModel
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from openai import OpenAI
 
@@ -26,6 +29,8 @@ from ..utils.email import send_patient_welcome_email
 from ..utils.phone import parse_to_e164, placeholder_email_for_phone_account, is_placeholder_login_email
 from ..utils.sms import send_patient_credentials_sms
 from ..services.vector_store import get_vector_store
+from ..services.data_purge import purge_patient_data
+from ..services.treatment_medications import active_treatment_medication_summaries_by_patient
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -540,6 +545,12 @@ async def create_patient(
     generated_password = None
     existing_user = None
     e164_phone = parse_to_e164(patient_data.phone) if patient_data.phone else None
+    if patient_data.phone and not e164_phone:
+        logger.warning(
+            "Patient phone %r could not be normalized to E.164; SMS and login phone will be skipped. "
+            "Use Sri Lanka format (e.g. 076xxxxxxx or +94xxxxxxxxx) and DEFAULT_PHONE_REGION=LK.",
+            patient_data.phone,
+        )
 
     account_by_email = bool(patient_data.email) and not patient_data.user_id
     account_by_phone_only = (
@@ -754,14 +765,25 @@ async def get_patients(
     elif current_user.role == UserRole.PATIENT:
         query = query.filter(Patient.user_id == current_user.id)
     
-    # Apply search
+    # Apply search (includes phone for emergency / front-desk lookup)
     if search:
-        search_filter = f"%{search}%"
+        raw = (search or "").strip()
+        search_filter = f"%{raw}%"
+        e164 = parse_to_e164(raw) if raw else None
+        query = query.outerjoin(User, Patient.user_id == User.id)
+        phone_clauses = [
+            Patient.phone.ilike(search_filter),
+            Patient.emergency_contact_phone.ilike(search_filter),
+            User.phone.ilike(search_filter),
+        ]
+        if e164:
+            phone_clauses.extend([User.phone == e164, Patient.phone == e164])
         query = query.filter(
             or_(
                 Patient.patient_id.ilike(search_filter),
                 Patient.emergency_contact_name.ilike(search_filter),
-                Patient.address.ilike(search_filter)
+                Patient.address.ilike(search_filter),
+                *phone_clauses,
             )
         )
     
@@ -811,11 +833,19 @@ async def get_patients(
     ).group_by(Document.patient_id).all()
     
     last_doc_map = {pid: last_upload for pid, last_upload in last_doc_results}
+
+    med_by_pid = active_treatment_medication_summaries_by_patient(db, patient_ids)
     
     # Build detailed responses using pre-fetched data
     patient_details = []
     for patient in patients:
-        detail = _build_patient_detail_optimized(patient, doc_count_map.get(patient.id, 0), last_doc_map.get(patient.id))
+        detail = _build_patient_detail_optimized(
+            patient,
+            doc_count_map.get(patient.id, 0),
+            last_doc_map.get(patient.id),
+            db=None,
+            medications_from_active_treatments=med_by_pid.get(patient.id),
+        )
         patient_details.append(detail)
     
     return PatientListResponse(
@@ -948,7 +978,21 @@ async def update_patient(
     update_data = patient_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(patient, field, value)
-    
+
+    # Sync linked patient account login phone when clinic updates mobile (SMS/login use User.phone)
+    if patient.user_id and "phone" in update_data:
+        linked = db.query(User).filter(User.id == patient.user_id, User.role == UserRole.PATIENT).first()
+        if linked:
+            e164 = parse_to_e164(patient.phone) if patient.phone else None
+            if e164:
+                taken = db.query(User).filter(User.phone == e164, User.id != linked.id).first()
+                if taken:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="This phone number is already linked to another user account",
+                    )
+                linked.phone = e164
+
     db.commit()
     db.refresh(patient)
     
@@ -977,18 +1021,10 @@ async def delete_patient(
     ).first()
     if not membership:
         raise HTTPException(status_code=403, detail="Access denied: Patient not enrolled in your clinic")
-    
-    # Check if patient has documents
-    document_count = db.query(Document).filter(Document.patient_id == patient.id).count()
-    if document_count > 0:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Cannot delete patient with {document_count} documents. Delete or reassign documents first."
-        )
-    
-    db.delete(patient)
+
+    purge_patient_data(db, patient, delete_linked_user=True)
     db.commit()
-    
+
     return {"message": "Patient deleted successfully"}
 
 def _get_patient_detail(patient_id: int, db: Session, current_user: User) -> PatientDetailResponse:
@@ -1036,7 +1072,8 @@ def _build_patient_detail_optimized(
     patient: Patient, 
     documents_count: Optional[int] = None,
     last_visit: Optional[datetime] = None,
-    db: Optional[Session] = None
+    db: Optional[Session] = None,
+    medications_from_active_treatments: Optional[str] = None,
 ) -> PatientDetailResponse:
     """Build detailed patient response with optional pre-fetched data to avoid N+1 queries."""
     
@@ -1065,6 +1102,11 @@ def _build_patient_detail_optimized(
         documents_count = db.query(Document).filter(Document.patient_id == patient.id).count()
     elif documents_count is None:
         documents_count = 0
+
+    med_from_history = medications_from_active_treatments
+    if med_from_history is None and db is not None:
+        med_map = active_treatment_medication_summaries_by_patient(db, [patient.id])
+        med_from_history = med_map.get(patient.id)
     
     # Get last document upload date (use pre-fetched if available, otherwise query)
     if last_visit is None and db:
@@ -1088,7 +1130,8 @@ def _build_patient_detail_optimized(
         "clinic_name": primary_clinic_name,  # Primary clinic for backward compatibility
         "clinic_names": clinic_names,  # All clinic names
         "documents_count": documents_count,
-        "last_visit": last_visit
+        "last_visit": last_visit,
+        "medications_from_active_treatments": med_from_history,
     })
     
     return PatientDetailResponse(**response_data)

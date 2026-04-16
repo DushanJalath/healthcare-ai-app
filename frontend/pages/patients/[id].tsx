@@ -20,6 +20,7 @@ export default function PatientDetailPage() {
   const [historyEntries, setHistoryEntries] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [showAddHistory, setShowAddHistory] = useState(false)
+  const [historyEditingEntry, setHistoryEditingEntry] = useState<any | null>(null)
   const [savingHistory, setSavingHistory] = useState(false)
   const [historyForm, setHistoryForm] = useState({
     title: '', condition: '', description: '', medications: '',
@@ -40,6 +41,7 @@ export default function PatientDetailPage() {
   }, [session?.user, isClinicUser])
 
   const openAddHistoryForm = () => {
+    setHistoryEditingEntry(null)
     setHistoryForm({
       title: '',
       condition: '',
@@ -50,6 +52,24 @@ export default function PatientDetailPage() {
       start_date: '',
       end_date: '',
       status: 'resolved',
+    })
+    setShowAddHistory(true)
+  }
+
+  const openEditHistoryForm = (entry: any) => {
+    const toDateInput = (v: string | null | undefined) =>
+      v ? String(v).slice(0, 10) : ''
+    setHistoryEditingEntry(entry)
+    setHistoryForm({
+      title: entry.title || '',
+      condition: entry.condition || '',
+      description: entry.description || '',
+      medications: entry.medications || '',
+      treating_doctor: entry.treating_doctor || '',
+      clinic_name: entry.clinic_name || resolvedClinicLabel,
+      start_date: toDateInput(entry.start_date),
+      end_date: toDateInput(entry.end_date),
+      status: (entry.status || 'resolved') as 'ongoing' | 'resolved' | 'chronic',
     })
     setShowAddHistory(true)
   }
@@ -131,27 +151,40 @@ export default function PatientDetailPage() {
     }
   }
 
-  const handleAddHistoryEntry = async () => {
+  const handleSaveHistoryEntry = async () => {
     if (!session?.accessToken || !patientId) return
     if (!historyForm.title.trim() || !historyForm.start_date) {
       toast.error('Title and start date are required')
       return
     }
+    const body = {
+      title: historyForm.title,
+      condition: historyForm.condition || null,
+      description: historyForm.description || null,
+      medications: historyForm.medications || null,
+      treating_doctor: historyForm.treating_doctor || null,
+      clinic_name: historyForm.clinic_name || null,
+      start_date: historyForm.start_date,
+      end_date: historyForm.end_date || null,
+      status: historyForm.status,
+    }
     try {
       setSavingHistory(true)
-      await api.post(`/medical-history/patient/${patientId}`, {
-        ...historyForm,
-        condition: historyForm.condition || null,
-        description: historyForm.description || null,
-        medications: historyForm.medications || null,
-        treating_doctor: historyForm.treating_doctor || null,
-        clinic_name: historyForm.clinic_name || null,
-        end_date: historyForm.end_date || null,
-      }, {
-        headers: { Authorization: `Bearer ${session.accessToken}` }
-      })
-      toast.success('Medical history entry added')
+      if (historyEditingEntry) {
+        await api.put(
+          `/medical-history/patient/${patientId}/entry/${historyEditingEntry.id}`,
+          body,
+          { headers: { Authorization: `Bearer ${session.accessToken}` } }
+        )
+        toast.success('Medical history entry updated')
+      } else {
+        await api.post(`/medical-history/patient/${patientId}`, body, {
+          headers: { Authorization: `Bearer ${session.accessToken}` }
+        })
+        toast.success('Medical history entry added')
+      }
       setShowAddHistory(false)
+      setHistoryEditingEntry(null)
       setHistoryForm({
         title: '', condition: '', description: '', medications: '',
         treating_doctor: '', clinic_name: '', start_date: '', end_date: '',
@@ -159,9 +192,27 @@ export default function PatientDetailPage() {
       })
       fetchHistoryEntries()
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to add entry')
+      toast.error(error.response?.data?.detail || 'Failed to save entry')
     } finally {
       setSavingHistory(false)
+    }
+  }
+
+  const handleDeleteHistoryEntry = async (entryId: number) => {
+    if (!session?.accessToken || !patientId) return
+    if (!confirm('Delete this medical history entry? This cannot be undone.')) return
+    try {
+      await api.delete(`/medical-history/patient/${patientId}/entry/${entryId}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      })
+      toast.success('Entry deleted')
+      if (historyEditingEntry?.id === entryId) {
+        setShowAddHistory(false)
+        setHistoryEditingEntry(null)
+      }
+      fetchHistoryEntries()
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to delete entry')
     }
   }
 
@@ -358,6 +409,18 @@ export default function PatientDetailPage() {
                         {patient.current_medications || 'No current medications'}
                       </p>
                     </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">
+                        Medications (active treatment history)
+                      </label>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Pulled from treatment episodes whose date range includes today (medications recorded on each episode).
+                      </p>
+                      <p className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">
+                        {patient.medications_from_active_treatments?.trim() ||
+                          'None listed for active treatment periods'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -368,7 +431,14 @@ export default function PatientDetailPage() {
                     {isClinicUser && (
                       <button
                         type="button"
-                        onClick={() => (showAddHistory ? setShowAddHistory(false) : openAddHistoryForm())}
+                        onClick={() => {
+                          if (showAddHistory) {
+                            setShowAddHistory(false)
+                            setHistoryEditingEntry(null)
+                          } else {
+                            openAddHistoryForm()
+                          }
+                        }}
                         className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
                       >
                         + Add Entry
@@ -379,7 +449,9 @@ export default function PatientDetailPage() {
                   {/* Add form */}
                   {showAddHistory && (
                     <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Add Medical History Entry</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                        {historyEditingEntry ? 'Edit Medical History Entry' : 'Add Medical History Entry'}
+                      </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Title *</label>
@@ -457,11 +529,11 @@ export default function PatientDetailPage() {
                         </div>
                       </div>
                       <div className="flex space-x-3 mt-4">
-                        <button type="button" onClick={handleAddHistoryEntry} disabled={savingHistory}
+                        <button type="button" onClick={handleSaveHistoryEntry} disabled={savingHistory}
                           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50">
-                          {savingHistory ? 'Saving...' : 'Save Entry'}
+                          {savingHistory ? 'Saving...' : historyEditingEntry ? 'Update Entry' : 'Save Entry'}
                         </button>
-                        <button type="button" onClick={() => setShowAddHistory(false)}
+                        <button type="button" onClick={() => { setShowAddHistory(false); setHistoryEditingEntry(null) }}
                           className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                           Cancel
                         </button>
@@ -490,15 +562,35 @@ export default function PatientDetailPage() {
                               'bg-blue-500 border-blue-300'
                             }`} />
                             <div className="flex-1 bg-gray-50 rounded-lg border p-3">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h5 className="text-sm font-semibold text-gray-900">{entry.title}</h5>
-                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  entry.status === 'ongoing' ? 'bg-green-100 text-green-800' :
-                                  entry.status === 'chronic' ? 'bg-orange-100 text-orange-800' :
-                                  'bg-blue-100 text-blue-800'
-                                }`}>
-                                  {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
-                                </span>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                  <h5 className="text-sm font-semibold text-gray-900">{entry.title}</h5>
+                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    entry.status === 'ongoing' ? 'bg-green-100 text-green-800' :
+                                    entry.status === 'chronic' ? 'bg-orange-100 text-orange-800' :
+                                    'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                                  </span>
+                                </div>
+                                {isClinicUser && (
+                                  <div className="flex flex-shrink-0 items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditHistoryForm(entry)}
+                                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteHistoryEntry(entry.id)}
+                                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                               {entry.condition && <p className="text-xs text-gray-600 mt-0.5">Diagnosis: {entry.condition}</p>}
                               <p className="text-xs text-gray-500 mt-0.5">

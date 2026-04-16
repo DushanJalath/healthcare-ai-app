@@ -14,6 +14,7 @@ from ..models.audit_log import AuditLog
 from ..schemas.user import UserResponse, UserUpdate, ChangePasswordRequest, user_response_from_user
 from ..utils.deps import get_current_active_user, require_admin
 from ..utils.auth import verify_password, get_password_hash
+from ..services.data_purge import purge_patient_data
 
 class DeleteAccountRequest(BaseModel):
     password: str
@@ -111,21 +112,7 @@ async def delete_account(
     if current_user.role == UserRole.PATIENT:
         patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
         if patient:
-            # Delete audit logs referencing this patient
-            db.query(AuditLog).filter(AuditLog.patient_id == patient.id).delete()
-            
-            # Get documents to delete files
-            patient_docs = db.query(Document).filter(Document.patient_id == patient.id).all()
-            _delete_document_files(patient_docs)
-            
-            # Delete extractions for patient's documents
-            db.query(Extraction).filter(Extraction.patient_id == patient.id).delete()
-            
-            # Delete documents for this patient from database
-            db.query(Document).filter(Document.patient_id == patient.id).delete()
-            
-            # Delete patient
-            db.delete(patient)
+            purge_patient_data(db, patient, delete_linked_user=False)
     
     # Delete associated clinic and related data if user is clinic admin
     if current_user.role == UserRole.CLINIC_ADMIN:
@@ -134,23 +121,10 @@ async def delete_account(
             # Delete audit logs referencing this clinic
             db.query(AuditLog).filter(AuditLog.clinic_id == clinic.id).delete()
             
-            # Get all patients in this clinic
+            # Remove all patients tied to this clinic (legacy clinic_id) with full data purge
             clinic_patients = db.query(Patient).filter(Patient.clinic_id == clinic.id).all()
-            for patient in clinic_patients:
-                # Delete audit logs for these patients
-                db.query(AuditLog).filter(AuditLog.patient_id == patient.id).delete()
-                
-                # Get documents to delete files
-                patient_docs = db.query(Document).filter(Document.patient_id == patient.id).all()
-                _delete_document_files(patient_docs)
-                
-                # Delete extractions for patient
-                db.query(Extraction).filter(Extraction.patient_id == patient.id).delete()
-                # Delete documents for patient from database
-                db.query(Document).filter(Document.patient_id == patient.id).delete()
-            
-            # Delete all patients in clinic
-            db.query(Patient).filter(Patient.clinic_id == clinic.id).delete()
+            for patient in list(clinic_patients):
+                purge_patient_data(db, patient, delete_linked_user=True)
             
             # Get remaining clinic documents to delete files
             clinic_docs = db.query(Document).filter(Document.clinic_id == clinic.id).all()

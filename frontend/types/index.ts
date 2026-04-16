@@ -283,6 +283,8 @@ export interface PatientDetailResponse extends Patient {
   clinic_ids?: number[]  // List of all clinic IDs patient is enrolled in
   documents_count?: number
   last_visit?: string
+  /** Medications from treatment history rows active as of server date */
+  medications_from_active_treatments?: string | null
 }
 
 export interface PatientStatsResponse {

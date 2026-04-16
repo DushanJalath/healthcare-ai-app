@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, status, Query, Request, UploadFile
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, func, and_
-from typing import List, Optional
+from typing import List, Optional, cast
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 
@@ -19,6 +19,11 @@ from ..utils.deps import get_current_active_user
 from ..utils.file_handler import save_upload_file
 from ..utils.audit import get_audit_logger, AuditAction, AuditEntityType
 from ..utils.phone import is_placeholder_login_email
+from ..services.health_trends_from_extractions import (
+    MetricKey,
+    build_monthly_points,
+    collect_document_metric_readings,
+)
 
 router = APIRouter(prefix="/patient-dashboard", tags=["patient-dashboard"])
 
@@ -36,6 +41,22 @@ class PatientDashboardResponse(BaseModel):
     stats: PatientDashboardStats
     recent_documents: List[DocumentResponse]
     timeline_events: List[dict]
+
+
+class HealthTrendPoint(BaseModel):
+    label: str
+    value: float
+    month_key: str
+
+
+class HealthTrendsResponse(BaseModel):
+    metric: str
+    unit: str
+    points: List[HealthTrendPoint]
+    latest_value: Optional[float] = None
+    has_data: bool
+    source: str = "document_extractions"
+
 
 @router.get("/", response_model=PatientDashboardResponse)
 async def get_patient_dashboard(
@@ -273,6 +294,79 @@ async def get_patient_stats(
         "processed_documents": processed_docs,
         "failed_documents": failed_docs
     }
+
+
+@router.get("/health-trends", response_model=HealthTrendsResponse)
+async def get_patient_health_trends(
+    metric: str = Query(
+        "glucose",
+        description="One of: glucose, cholesterol, bp_systolic, heart_rate, weight",
+    ),
+    months: int = Query(6, ge=1, le=24),
+    clinic_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Time series for the premium health chart, derived from processed document OCR text.
+    Values are parsed from uploaded records (labs, vitals sections, etc.), not manually entered vitals.
+    """
+    allowed = {"glucose", "cholesterol", "bp_systolic", "heart_rate", "weight"}
+    if metric not in allowed:
+        raise HTTPException(status_code=400, detail=f"Invalid metric. Allowed: {', '.join(sorted(allowed))}")
+
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Access denied - patients only")
+
+    patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    if clinic_id is not None:
+        membership = db.query(PatientClinic).filter(
+            PatientClinic.patient_id == patient.id,
+            PatientClinic.clinic_id == clinic_id,
+            PatientClinic.is_active == True,
+        ).first()
+        if not membership:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Patient is not enrolled in clinic {clinic_id}",
+            )
+
+    mkey = cast(MetricKey, metric)
+    readings = collect_document_metric_readings(
+        db,
+        patient_id=patient.id,
+        metric=mkey,
+        clinic_id=clinic_id,
+    )
+    points_raw, latest, weight_unit = build_monthly_points(
+        readings,
+        num_months=months,
+        metric=mkey,
+    )
+
+    if metric == "glucose":
+        unit = "mg/dL"
+    elif metric == "cholesterol":
+        unit = "mg/dL"
+    elif metric == "bp_systolic":
+        unit = "mmHg"
+    elif metric == "heart_rate":
+        unit = "bpm"
+    elif metric == "weight":
+        unit = "kg" if weight_unit == "kg" else "lb"
+    else:
+        unit = "lb"
+
+    return HealthTrendsResponse(
+        metric=metric,
+        unit=unit,
+        points=[HealthTrendPoint(**p) for p in points_raw],
+        latest_value=latest,
+        has_data=bool(points_raw),
+    )
 
 
 @router.get("/medical-records")

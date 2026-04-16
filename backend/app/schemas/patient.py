@@ -114,6 +114,7 @@ class PatientDetailResponse(PatientResponse):
     clinic_names: Optional[List[str]] = None  # New: list of clinic names from memberships
     documents_count: Optional[int] = 0
     last_visit: Optional[datetime] = None
+    medications_from_active_treatments: Optional[str] = None
 
 class PatientListResponse(BaseModel):
     patients: List[PatientDetailResponse]

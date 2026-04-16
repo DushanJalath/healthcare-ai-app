@@ -19,10 +19,11 @@ a {
   box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+/* App UI is light-themed only. Do not set color-scheme: dark on html — it makes native
+   <input> controls use a dark background while Tailwind text-gray-900 stays dark, so
+   typed text becomes nearly invisible. Use explicit bg-white on inputs where needed. */
+html {
+  color-scheme: light;
 }
 
 /* Hide scrollbars but keep functionality */
@@ -66,7 +67,7 @@ table {
   }
   
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-500 focus:border-transparent;
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-medical-500 focus:border-transparent;
   }
   
   .card {

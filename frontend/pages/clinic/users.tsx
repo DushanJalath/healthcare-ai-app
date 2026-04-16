@@ -186,7 +186,7 @@ export default function ClinicPatientsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by patient ID, name, or address..."
+                placeholder="Search by patient ID, phone, emergency contact, or address..."
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-500 focus:border-transparent"
               />
             </div>

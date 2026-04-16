@@ -29,14 +29,22 @@ def parse_to_e164(raw: Optional[str], default_region: Optional[str] = None) -> O
     """Parse a phone string to E.164, or None if invalid."""
     if not raw or not str(raw).strip():
         return None
-    region = (default_region or settings.default_phone_region or "US").strip()
-    try:
-        num = phonenumbers.parse(str(raw).strip(), region)
-        if not phonenumbers.is_valid_number(num):
-            return None
-        return phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.E164)
-    except NumberParseException:
-        return None
+    text = str(raw).strip()
+    primary = (default_region or settings.default_phone_region or "LK").strip() or "LK"
+    # National numbers like 076xxxxxxx only parse correctly with region LK. If DEFAULT_PHONE_REGION
+    # was ever US (or unset wrongly), the first parse fails — retry with LK for Sri Lanka deployments.
+    regions_to_try = [primary]
+    if primary.upper() != "LK":
+        regions_to_try.append("LK")
+
+    for region in regions_to_try:
+        try:
+            num = phonenumbers.parse(text, region)
+            if phonenumbers.is_valid_number(num):
+                return phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.E164)
+        except NumberParseException:
+            continue
+    return None
 
 
 def find_user_by_login_identifier(db: Session, raw: str) -> Optional["User"]:
