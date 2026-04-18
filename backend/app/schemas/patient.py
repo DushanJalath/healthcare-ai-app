@@ -41,34 +41,37 @@ class PatientBase(BaseModel, SecurityValidatorMixin):
 class PatientCreate(PatientBase):
     user_id: Optional[int] = None
     clinic_id: Optional[int] = None  # Will be set from current user's clinic
-    email: Optional[EmailStr] = None  # Patient email for account creation
+    email: EmailStr  # Required: patient portal account / credentials
     first_name: Optional[str] = None  # Patient first name for account creation
     last_name: Optional[str] = None  # Patient last name for account creation
 
+    @validator('email', pre=True)
+    def strip_email(cls, v):
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
     @validator('first_name', 'last_name')
     def validate_names(cls, v):
-        if v is not None and v.strip():
-            return SecureTextValidator.sanitize_name(v) if v else None
+        if v is not None and str(v).strip():
+            return SecureTextValidator.sanitize_name(str(v).strip())
         return None
     
     @model_validator(mode='after')
-    def validate_account_fields(self):
-        # Email account: names required. Phone-only account: phone + both names (otherwise phone is demographics only).
-        email = self.email
-        first_name = self.first_name
-        last_name = self.last_name
-        phone_set = bool(self.phone and str(self.phone).strip())
-
-        if email:
-            if not first_name or not last_name:
-                raise ValueError('first_name and last_name are required when email is provided')
-        elif phone_set and first_name and last_name:
-            pass
-        elif phone_set and (not first_name or not last_name):
-            pass
-        elif first_name or last_name:
-            pass
-
+    def validate_patient_create_required(self):
+        """Core patient demographics are required; emergency/medical blocks stay optional on the model."""
+        fn = (self.first_name or '').strip()
+        ln = (self.last_name or '').strip()
+        if not fn or not ln:
+            raise ValueError('first_name and last_name are required')
+        if self.date_of_birth is None:
+            raise ValueError('date_of_birth is required')
+        if self.gender is None:
+            raise ValueError('gender is required')
+        if not (self.phone or '').strip():
+            raise ValueError('phone is required')
+        if not (self.address or '').strip():
+            raise ValueError('address is required')
         return self
 
 class PatientUpdate(BaseModel, SecurityValidatorMixin):

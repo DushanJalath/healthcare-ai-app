@@ -70,8 +70,31 @@ export default function PatientPremiumSubscribePage() {
 
   const handleDummyPay = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!cardName.trim() || cardNumber.replace(/\s/g, '').length < 12) {
-      toast.error('Enter dummy card details to continue.')
+    const name = cardName.trim()
+    const digits = cardNumber.replace(/\s/g, '')
+    const expTrim = expiry.trim()
+    const cvvTrim = cvv.trim()
+
+    if (!name) {
+      toast.error('Name on card is required')
+      return
+    }
+    if (digits.length < 12 || digits.length > 19 || !/^\d+$/.test(digits)) {
+      toast.error('Enter a valid card number (12–19 digits)')
+      return
+    }
+    const expMatch = expTrim.match(/^(\d{2})\/(\d{2})$/)
+    if (!expMatch) {
+      toast.error('Expiry is required (MM/YY)')
+      return
+    }
+    const mm = parseInt(expMatch[1], 10)
+    if (mm < 1 || mm > 12) {
+      toast.error('Expiry month must be between 01 and 12')
+      return
+    }
+    if (cvvTrim.length < 3 || cvvTrim.length > 4 || !/^\d+$/.test(cvvTrim)) {
+      toast.error('CVV must be 3 or 4 digits')
       return
     }
     setProcessing(true)

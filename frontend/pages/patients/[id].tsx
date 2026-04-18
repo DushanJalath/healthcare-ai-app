@@ -157,6 +157,14 @@ export default function PatientDetailPage() {
       toast.error('Title and start date are required')
       return
     }
+    if (
+      historyForm.end_date &&
+      historyForm.start_date &&
+      historyForm.end_date < historyForm.start_date
+    ) {
+      toast.error('End date cannot be before start date')
+      return
+    }
     const body = {
       title: historyForm.title,
       condition: historyForm.condition || null,

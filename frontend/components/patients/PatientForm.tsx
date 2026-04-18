@@ -1,7 +1,6 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { useForm } from 'react-hook-form'
 import { Patient, Gender } from '@/types'
-import toast from 'react-hot-toast'
 
 interface PatientFormProps {
   patient?: Patient
@@ -27,11 +26,12 @@ interface PatientFormData {
 }
 
 export default function PatientForm({ patient, onSubmit, onCancel, loading = false }: PatientFormProps) {
+  const isNewPatient = !patient
+
   const {
     register,
     handleSubmit,
-    formState: { errors },
-    watch
+    formState: { errors }
   } = useForm<PatientFormData>({
     defaultValues: patient ? {
       patient_id: patient.patient_id,
@@ -65,12 +65,10 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
   })
 
   const handleFormSubmit = (data: PatientFormData) => {
-    // Transform data for API
     const submitData: any = {
       ...data,
       gender: data.gender || null,
       date_of_birth: data.date_of_birth || null,
-      // Remove empty strings
       phone: data.phone || null,
       address: data.address || null,
       emergency_contact_name: data.emergency_contact_name || null,
@@ -78,14 +76,12 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
       medical_history: data.medical_history || null,
       allergies: data.allergies || null,
       current_medications: data.current_medications || null,
-      // Only include email/name if creating new patient (not updating)
       ...(patient ? {} : {
-        email: data.email || null,
+        email: (data.email || '').trim() || null,
         first_name: data.first_name || null,
         last_name: data.last_name || null
       })
     }
-    // For new patients: omit patient_id when blank so backend auto-generates per clinic
     if (isNewPatient && (!submitData.patient_id || !String(submitData.patient_id).trim())) {
       delete submitData.patient_id
     } else if (submitData.patient_id !== undefined && !String(submitData.patient_id).trim()) {
@@ -94,37 +90,24 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
     onSubmit(submitData)
   }
 
-  const isNewPatient = !patient
-
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-      {/* Account Information - Only for new patients */}
       {isNewPatient && (
         <div className="bg-blue-50 p-6 rounded-lg shadow border border-blue-200">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information (Optional)</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Patient identity</h3>
           <p className="text-sm text-gray-600 mb-4">
-            With email: credentials by email; if mobile is set below, also by SMS.
+            First name, last name, and email are required. Login credentials are sent to the patient&apos;s email.
           </p>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                First Name
+                First Name *
               </label>
               <input
                 {...register('first_name', {
-                  validate: (value) => {
-                    const email = watch('email')
-                    const phone = watch('phone')
-                    const wantPhoneAccount = !email?.trim() && !!phone?.trim()
-                    if (email?.trim() && !value) {
-                      return 'First name is required when email is provided'
-                    }
-                    if (wantPhoneAccount && !value) {
-                      return 'First name is required for a phone-based account (with mobile in Basic Information)'
-                    }
-                    return true
-                  }
+                  validate: (value) =>
+                    (value && value.trim()) ? true : 'First name is required'
                 })}
                 type="text"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -137,22 +120,12 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Last Name
+                Last Name *
               </label>
               <input
                 {...register('last_name', {
-                  validate: (value) => {
-                    const email = watch('email')
-                    const phone = watch('phone')
-                    const wantPhoneAccount = !email?.trim() && !!phone?.trim()
-                    if (email?.trim() && !value) {
-                      return 'Last name is required when email is provided'
-                    }
-                    if (wantPhoneAccount && !value) {
-                      return 'Last name is required for a phone-based account (with mobile in Basic Information)'
-                    }
-                    return true
-                  }
+                  validate: (value) =>
+                    (value && value.trim()) ? true : 'Last name is required'
                 })}
                 type="text"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -165,46 +138,31 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
+                Email address *
               </label>
               <input
                 {...register('email', {
                   validate: (value) => {
-                    const firstName = watch('first_name')
-                    const lastName = watch('last_name')
-                    const phone = watch('phone')
                     const v = (value || '').trim()
-                    if (v && !/^\S+@\S+$/i.test(v)) {
-                      return 'Invalid email address'
-                    }
-                    if (v && (!firstName?.trim() || !lastName?.trim())) {
-                      return 'First name and last name are required when email is provided'
-                    }
-                    if (!v && phone?.trim() && (!firstName?.trim() || !lastName?.trim())) {
-                      return 'First and last name are required when using phone-only account'
-                    }
-                    return true
+                    if (!v) return 'Email address is required'
+                    return /^\S+@\S+\.\S+$/.test(v) ? true : 'Invalid email address'
                   }
                 })}
                 type="email"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="patient@example.com (optional if phone-only)"
+                placeholder="patient@example.com"
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
               )}
-              <p className="mt-1 text-xs text-gray-500">
-                With email: credentials by email; if mobile is set below, also by SMS.
-              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Basic Information */}
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {!isNewPatient && (
             <div>
@@ -231,25 +189,31 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
               )}
             </div>
           )}
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date of Birth
+              Date of Birth *
             </label>
             <input
-              {...register('date_of_birth')}
+              {...register('date_of_birth', { required: 'Date of birth is required' })}
               type="date"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               max={new Date().toISOString().split('T')[0]}
             />
+            {errors.date_of_birth && (
+              <p className="mt-1 text-sm text-red-600">{errors.date_of_birth.message}</p>
+            )}
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Gender
+              Gender *
             </label>
             <select
-              {...register('gender')}
+              {...register('gender', {
+                validate: (v) =>
+                  v !== '' && v != null ? true : 'Gender is required'
+              })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select gender</option>
@@ -258,27 +222,21 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
               <option value={Gender.OTHER}>Other</option>
               <option value={Gender.PREFER_NOT_TO_SAY}>Prefer not to say</option>
             </select>
+            {errors.gender && (
+              <p className="mt-1 text-sm text-red-600">{errors.gender.message}</p>
+            )}
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone Number
+              Phone Number *
             </label>
             <input
               {...register('phone', {
-                pattern: {
-                  value: /^[\+]?[\d\s\-\(\)]+$/,
-                  message: 'Invalid phone number format'
-                },
-                validate: () => {
-                  const email = watch('email')
-                  const phone = watch('phone')
-                  const fn = watch('first_name')
-                  const ln = watch('last_name')
-                  if (!email?.trim() && phone?.trim() && (!fn?.trim() || !ln?.trim())) {
-                    return 'Enter first and last name in Account Information for phone-based login'
-                  }
-                  return true
+                validate: (value) => {
+                  const t = (value || '').trim()
+                  if (!t) return 'Phone number is required'
+                  return /^[\+]?[\d\s\-\(\)]+$/.test(t) || 'Invalid phone number format'
                 }
               })}
               type="tel"
@@ -290,24 +248,34 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
             )}
           </div>
         </div>
-        
+
         <div className="mt-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Address
+            Address *
           </label>
           <textarea
-            {...register('address')}
+            {...register('address', {
+              required: 'Address is required',
+              validate: (value) => {
+                const t = (value || '').trim()
+                if (t.length < 3) return 'Please enter a complete address'
+                return true
+              }
+            })}
             rows={3}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Patient's address"
           />
+          {errors.address && (
+            <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>
+          )}
         </div>
       </div>
 
-      {/* Emergency Contact */}
       <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Emergency Contact</h3>
-        
+        <h3 className="text-lg font-medium text-gray-900 mb-1">Emergency Contact</h3>
+        <p className="text-sm text-gray-500 mb-4">Optional</p>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -319,16 +287,17 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
               placeholder="Emergency contact name"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Contact Phone
             </label>
             <input
               {...register('emergency_contact_phone', {
-                pattern: {
-                  value: /^[\+]?[\d\s\-\(\)]+$/,
-                  message: 'Invalid phone number format'
+                validate: (value) => {
+                  const v = (value || '').trim()
+                  if (!v) return true
+                  return /^[\+]?[\d\s\-\(\)]+$/.test(v) || 'Invalid phone number format'
                 }
               })}
               type="tel"
@@ -342,10 +311,10 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
         </div>
       </div>
 
-      {/* Medical Information */}
       <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Medical Information</h3>
-        
+        <h3 className="text-lg font-medium text-gray-900 mb-1">Medical Information</h3>
+        <p className="text-sm text-gray-500 mb-4">Optional</p>
+
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -358,7 +327,7 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
               placeholder="Relevant medical history, past surgeries, chronic conditions, etc."
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Known Allergies
@@ -370,7 +339,7 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
               placeholder="Food allergies, drug allergies, environmental allergies, etc."
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Current Medications
@@ -385,7 +354,6 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
         </div>
       </div>
 
-      {/* Form Actions */}
       <div className="flex justify-end space-x-3">
         {onCancel && (
           <button
@@ -396,7 +364,7 @@ export default function PatientForm({ patient, onSubmit, onCancel, loading = fal
             Cancel
           </button>
         )}
-        
+
         <button
           type="submit"
           disabled={loading}

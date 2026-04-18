@@ -186,17 +186,33 @@ export default function ClinicAdminDetailsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Clinic contact email</label>
                 <input
                   type="email"
-                  {...register('email')}
+                  {...register('email', {
+                    validate: (v) =>
+                      !(v || '').trim() ||
+                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v || '').trim()) ||
+                      'Enter a valid email address'
+                  })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md [color-scheme:light] text-gray-900"
                 />
+                {errors.email && (
+                  <p className="text-sm text-red-600 mt-1">{errors.email.message}</p>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                 <input
-                  {...register('phone')}
+                  {...register('phone', {
+                    validate: (v) =>
+                      !(v || '').trim() ||
+                      /^[+]?[\d\s\-()]+$/.test((v || '').trim()) ||
+                      'Enter a valid phone number'
+                  })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md [color-scheme:light] text-gray-900"
                 />
+                {errors.phone && (
+                  <p className="text-sm text-red-600 mt-1">{errors.phone.message}</p>
+                )}
               </div>
 
               <div>

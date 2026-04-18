@@ -79,6 +79,11 @@ export default function ProfilePage() {
     e.preventDefault()
     if (!session?.accessToken) return
 
+    if (!firstName.trim() || !lastName.trim()) {
+      toast.error('First name and last name are required')
+      return
+    }
+
     setUpdating(true)
     try {
       await api.put('/users/profile', 

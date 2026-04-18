@@ -976,6 +976,26 @@ async def update_patient(
     
     # Update fields
     update_data = patient_update.dict(exclude_unset=True)
+
+    def _merged(field: str):
+        if field in update_data:
+            return update_data[field]
+        return getattr(patient, field)
+
+    if current_user.role in [UserRole.CLINIC_ADMIN, UserRole.CLINIC_STAFF]:
+        dob = _merged("date_of_birth")
+        gender = _merged("gender")
+        phone_val = _merged("phone")
+        addr_val = _merged("address")
+        if dob is None:
+            raise HTTPException(status_code=400, detail="Date of birth is required")
+        if gender is None:
+            raise HTTPException(status_code=400, detail="Gender is required")
+        if not (phone_val or "").strip():
+            raise HTTPException(status_code=400, detail="Phone is required")
+        if not (addr_val or "").strip():
+            raise HTTPException(status_code=400, detail="Address is required")
+
     for field, value in update_data.items():
         setattr(patient, field, value)
 
