@@ -26,9 +26,10 @@ class AuditLogger:
         extra_metadata: Optional[Dict[str, Any]] = None,
         request: Optional[Request] = None,
         success: bool = True,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
+        commit: bool = True,
     ) -> AuditLog:
-        """Create an audit log entry."""
+        """Create an audit log entry. Pass commit=False to participate in the caller's transaction."""
         
         # Get request information
         ip_address = None
@@ -63,7 +64,10 @@ class AuditLogger:
         
         try:
             self.db.add(audit_log)
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
             self.db.refresh(audit_log)
             return audit_log
         except Exception as e:
@@ -138,6 +142,7 @@ class AuditLogger:
         patient_name: str,
         description: str,
         request: Optional[Request] = None,
+        commit: bool = True,
         **kwargs
     ):
         """Log a patient-related action."""
@@ -150,6 +155,7 @@ class AuditLogger:
             description=description,
             patient_id=patient_id,
             request=request,
+            commit=commit,
             **kwargs
         )
 

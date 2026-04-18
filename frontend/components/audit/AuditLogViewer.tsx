@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import api from '@/utils/api'
 import toast from 'react-hot-toast'
@@ -43,20 +43,16 @@ export default function AuditLogViewer({
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
 
-  useEffect(() => {
-    fetchAuditLogs()
-  }, [session, filters, page])
-
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = useCallback(async () => {
     if (!session?.accessToken) return
-    
+
     try {
       setLoading(true)
       const params = new URLSearchParams({
         page: page.toString(),
         per_page: '20'
       })
-      
+
       Object.entries(filters).forEach(([key, value]) => {
         if (value) params.append(key, value)
       })
@@ -65,7 +61,7 @@ export default function AuditLogViewer({
       const response = await api.get(`${endpoint}?${params}`, {
         headers: { Authorization: `Bearer ${session.accessToken}` }
       })
-      
+
       setLogs(response.data.logs)
       setTotal(response.data.total)
     } catch (error: any) {
@@ -73,7 +69,24 @@ export default function AuditLogViewer({
     } finally {
       setLoading(false)
     }
-  }
+  }, [session?.accessToken, patientOnly, page, filters])
+
+  useEffect(() => {
+    fetchAuditLogs()
+  }, [fetchAuditLogs])
+
+  useEffect(() => {
+    if (!patientOnly || typeof window === 'undefined') return
+    const onPatientActivityRefresh = () => {
+      setPage((prev) => {
+        if (prev !== 1) return 1
+        void fetchAuditLogs()
+        return prev
+      })
+    }
+    window.addEventListener('patient-activity-refresh', onPatientActivityRefresh)
+    return () => window.removeEventListener('patient-activity-refresh', onPatientActivityRefresh)
+  }, [patientOnly, fetchAuditLogs])
 
   const getActionIcon = (action: string) => {
     const icons = {

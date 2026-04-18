@@ -841,8 +841,6 @@ async def share_document_with_clinic(
         )
         db.add(notification)
 
-    db.commit()
-
     audit_logger = get_audit_logger(db)
     audit_logger.log_patient_action(
         action=AuditAction.UPDATE,
@@ -852,7 +850,10 @@ async def share_document_with_clinic(
         description=f"Shared document '{document.original_filename}' with clinic '{clinic.name}'",
         request=request,
         extra_metadata={"document_id": document_id, "clinic_id": body.clinic_id},
+        commit=False,
     )
+
+    db.commit()
 
     return {
         "message": f"Document shared with {clinic.name}",

@@ -298,6 +298,7 @@ export default function PatientDocuments() {
       )
       const clinicName = enrolledClinics.find(c => c.id === selectedClinicId)?.name || 'clinic'
       toast.success(`Document shared with ${clinicName}`)
+      window.dispatchEvent(new CustomEvent('patient-activity-refresh'))
       setShareModal(null)
       setSelectedClinicId(0)
       fetchDocuments()

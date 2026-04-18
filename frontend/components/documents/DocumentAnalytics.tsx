@@ -107,12 +107,12 @@ export default function DocumentAnalytics({ stats }: DocumentAnalyticsProps) {
       </div>
 
       {/* Usage Trends (placeholder for future implementation) */}
-      <div className="bg-white p-6 rounded-lg shadow">
+      {/* <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Upload Trends</h3>
         <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
           <p className="text-gray-500">Chart visualization coming soon</p>
         </div>
-      </div>
+      </div> */}
     </div>
   )
 }
