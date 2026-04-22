@@ -3,7 +3,8 @@ Derive time-series health metrics from stored OCR text on document extractions.
 
 The pipeline currently stores clinical text in ``Extraction.raw_text``; structured
 lab/vital JSON columns are not filled. We extract plausible numeric readings with
-conservative regexes and bucket them by calendar month for the patient dashboard chart.
+conservative regexes. The patient dashboard chart shows one point per processed document
+reading in the rolling window (not collapsed to one value per calendar month).
 """
 
 from __future__ import annotations
@@ -55,12 +56,20 @@ def _parse_total_cholesterol(text: str) -> Optional[float]:
     if not text:
         return None
     patterns = [
+        # Common lab PDFs: "CHOLESTEROL - TOTAL" / "Cholesterol - Total" with value on next line or same line.
+        # (Do not allow arbitrary chars between label and number — reference legends use "<200" after ":".)
+        r"(?i)cholesterol\s*[-–]\s*total\s*(?:[:(]\s*)?(?:\n\s*|\s+)(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"total\s+cholesterol\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        # Lab layouts often use spaces/tabs between label and value (no colon).
+        r"total\s+cholesterol\s+(?!hdl\b|ldl\b|ratio\b)(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"total\s+cholesterol\D{0,24}(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"cholesterol[,\s]+total\s*[:(]?\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"cholesterol\s+level\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"cholesterol\s+level\D{0,12}(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"cholesterol\s*\(\s*total\s*\)\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"serum\s+cholesterol\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
-        r"(?:^|[\n\r])\s*TC\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
-        r"\bCHOL\b\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"(?:^|[\n\r])\s*TC\s*[:(]?\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"\bCHOL\b\s*[:(]?\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
     ]
     for p in patterns:
         m = re.search(p, text, re.IGNORECASE | re.MULTILINE)
@@ -200,7 +209,13 @@ def build_monthly_points(
 ) -> Tuple[List[dict], Optional[float], str]:
     """
     Returns (points for chart, latest_value in window, weight_unit_hint).
+
+    Each processed document that yields a parse contributes one point. Multiple uploads
+    in the same calendar month all appear (sorted by reference time). The rolling window
+    is still ``num_months`` months back from the start of the current UTC month.
+
     ``weight_unit_hint`` is ``kg`` or ``lb`` (for weight only; otherwise ``lb`` unused).
+    ``month_key`` on each point is the reading date ``YYYY-MM-DD`` for stable keys.
     """
     if not readings:
         return [], None, "lb"
@@ -217,17 +232,13 @@ def build_monthly_points(
     latest_val = latest_row[1]
     weight_unit = latest_row[2] if metric == "weight" and latest_row[2] else "lb"
 
+    in_window.sort(key=lambda x: x[0])
     points: List[dict] = []
-    for i in range(num_months - 1, -1, -1):
-        mstart = start_current - relativedelta(months=i)
-        mend = mstart + relativedelta(months=1)
-        label = mstart.strftime("%b")
-        month_key = mstart.strftime("%Y-%m")
-        in_month = [(dt, val) for dt, val, _u in in_window if mstart <= dt < mend]
-        if not in_month:
-            continue
-        _dt, val = max(in_month, key=lambda x: x[0])
+    for _dt, val, _u in in_window:
         display = round(val, 1) if metric == "weight" else round(val)
-        points.append({"label": label, "value": float(display), "month_key": month_key})
+        day = _dt.day
+        label_dated = f"{_dt.strftime('%b')} {day}, {_dt.year}"
+        month_key = _dt.date().isoformat()
+        points.append({"label": label_dated, "value": float(display), "month_key": month_key})
 
     return points, float(round(latest_val, 1) if metric == "weight" else round(latest_val)), weight_unit

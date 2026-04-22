@@ -310,6 +310,8 @@ async def get_patient_health_trends(
     """
     Time series for the premium health chart, derived from processed document OCR text.
     Values are parsed from uploaded records (labs, vitals sections, etc.), not manually entered vitals.
+    Each processed document contributes at most one point per metric; multiple uploads in the same
+    month all appear when their reference timestamps fall in the requested rolling window.
     """
     allowed = {"glucose", "cholesterol", "bp_systolic", "heart_rate", "weight"}
     if metric not in allowed:
