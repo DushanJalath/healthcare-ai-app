@@ -183,7 +183,7 @@ export default function PremiumHealthChart({ clinicId = null, accessToken }: Pre
             role="status"
           >
             No data points in the last six months for this metric. After documents finish processing, matching
-            numbers (for example glucose, cholesterol, or blood pressure) from the document text will appear here.
+            numbers (for example glucose, cholesterol) from the document text will appear here.
           </div>
         ) : (
           <svg
