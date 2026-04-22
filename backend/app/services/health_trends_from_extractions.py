@@ -31,19 +31,39 @@ def _ensure_aware(dt: Optional[datetime]) -> datetime:
 
 
 def _parse_glucose(text: str) -> Optional[float]:
+    """
+    Blood glucose from OCR text (fasting, random, post-prandial, serum/plasma).
+    Avoids ``< 140``-style reference cutoffs by not allowing ``<`` in the gap before the value.
+    """
     if not text:
         return None
+    # ``[^\d<]`` blocks jumping past ``<`` into reference thresholds like ``< 140``.
+    gap = r"[^\d<]{0,60}"
     patterns = [
+        # Post-prandial (e.g. "POST PRANDIAL BLOOD SUGAR" + optional "(GLUCOSE" on next line + 64.00 mg/dl)
+        r"(?i)post\s+prandial\s+blood\s+sugar(?:\s*\(?\s*glucose)?" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"(?i)post\s+prandial\s+glucose\s*(?:\([^)]{0,40}\))?\s*" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        # Fasting / blood glucose (e.g. "FASTING BLOOD GLUCOSE VENOUS" then 81.00)
+        r"(?i)fasting\s+blood\s+glucose" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"(?i)fasting\s+blood\s+sugar" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"(?i)random\s+blood\s+(?:glucose|sugar)" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"(?i)blood\s+glucose" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"(?i)(?:serum|plasma)\s+glucose" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        # Label then value on following line (table OCR)
+        r"(?i)(?:fasting|post\s+prandial|random|serum|plasma)?\s*blood\s+sugar\s*(?:[:(]\s*)?(?:\n\s*|\s{2,})(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"(?i)(?:fasting|post\s+prandial|random|serum|plasma)?\s*glucose\s*(?:\([^)]{0,40}\))?\s*(?:[:(]\s*)?(?:\n\s*|\s{2,})(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        # Classic "Glucose: 95" / FBS / abbreviations
         r"(?:fasting|random|serum|plasma)?\s*glucose\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"glucose\s*\([^)]{0,40}\)\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"glucose[^:\n]{0,24}:\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"blood\s+sugar\s*[:(]\s*(\d{2,3}(?:\.\d+)?)",
         r"\bfbs?\b\s*[:(]\s*(\d{2,3}(?:\.\d+)?)",
         r"\bfbg\b\s*[:(]\s*(\d{2,3}(?:\.\d+)?)",
+        r"(?i)\bppbs?\b\s*[:(]?\s*" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"glucose\s*[:(]\s*(\d{2,3}(?:\.\d+)?)",
     ]
     for p in patterns:
-        m = re.search(p, text, re.IGNORECASE)
+        m = re.search(p, text, re.IGNORECASE | re.MULTILINE)
         if m:
             v = float(m.group(1))
             if 20 <= v <= 600:
