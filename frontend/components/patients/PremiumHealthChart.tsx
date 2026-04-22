@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '@/utils/api'
 
-export type HealthTrendMetricId = 'glucose' | 'cholesterol' | 'bp_systolic' | 'heart_rate' | 'weight'
+export type HealthTrendMetricId =
+  | 'glucose'
+  | 'cholesterol'
+  | 'bp_systolic'
+  | 'hemoglobin'
+  | 'wbc'
+  | 'platelets'
 
+/** CBC-related metrics use OCR on full blood count / lab reports. */
 const METRICS: { id: HealthTrendMetricId; label: string; unit: string }[] = [
-  { id: 'glucose', label: 'Blood glucose', unit: 'mg/dL' },
+  { id: 'glucose', label: 'Blood glucose (sugar)', unit: 'mg/dL' },
   { id: 'cholesterol', label: 'Cholesterol level', unit: 'mg/dL' },
   { id: 'bp_systolic', label: 'Blood pressure (systolic)', unit: 'mmHg' },
-  // { id: 'heart_rate', label: 'Heart rate', unit: 'bpm' },
-  // { id: 'weight', label: 'Weight', unit: 'lb' },
+  { id: 'hemoglobin', label: 'blood count: haemoglobin', unit: 'g/dL' },
+  { id: 'wbc', label: 'blood count: wbc', unit: '/mm3' },
+  { id: 'platelets', label: 'blood count: platelets', unit: '/mm3' },
 ]
 
 interface HealthTrendPoint {
@@ -79,11 +87,27 @@ export default function PremiumHealthChart({ clinicId = null, accessToken }: Pre
   }, [fetchTrends])
 
   const data = useMemo(() => series.map((p) => ({ label: p.label, value: p.value })), [series])
-  const values = data.map((d) => d.value)
-  const minV = values.length ? Math.min(...values) - 2 : 0
-  const maxV = values.length ? Math.max(...values) + 2 : 1
 
-  const formatValue = (v: number) => (metric === 'weight' ? v.toFixed(1) : String(Math.round(v)))
+  const { minV, maxV } = useMemo(() => {
+    const vals = series.map((p) => p.value)
+    if (!vals.length) return { minV: 0, maxV: 1 }
+    const lo = Math.min(...vals)
+    const hi = Math.max(...vals)
+    const span = hi - lo
+    const pad =
+      span > 0
+        ? Math.max(
+            span * 0.12,
+            metric === 'platelets' ? 8000 : metric === 'wbc' ? 200 : metric === 'hemoglobin' ? 0.5 : 2,
+          )
+        : Math.max(
+            Math.abs(hi) * 0.06,
+            metric === 'platelets' ? 12000 : metric === 'wbc' ? 400 : metric === 'hemoglobin' ? 1 : 2,
+          )
+    return { minV: lo - pad, maxV: hi + pad }
+  }, [series, metric])
+
+  const formatValue = (v: number) => (metric === 'hemoglobin' ? v.toFixed(1) : String(Math.round(v)))
   const formatWithUnit = (v: number) => `${formatValue(v)} ${unit}`
 
   const layout = useMemo(() => {
@@ -143,12 +167,12 @@ export default function PremiumHealthChart({ clinicId = null, accessToken }: Pre
           <h3 className="text-lg font-medium text-gray-900">Health trends over time</h3>
           <p className="text-sm text-gray-500 mt-1">
             {loading
-              ? 'Loading readings from your processed documents…'
+              ? 'Retrieving values from your processed medical documents…'
               : error
                 ? error
                 : data.length
-                  ? 'Track one metric at a time. Values come from text extracted from your uploaded medical documents.'
-                  : 'Track one metric at a time. Upload processed lab or visit documents that mention this metric to see a trend.'}
+                  ? 'One metric is shown at a time. Values are derived from measurements identified in your processed documents.'
+                  : 'One metric is shown at a time. Upload and process documents that include this measurement to populate the chart.'}
           </p>
         </div>
         <div className="flex flex-col gap-1 sm:items-end">
@@ -182,8 +206,8 @@ export default function PremiumHealthChart({ clinicId = null, accessToken }: Pre
             className="flex items-center justify-center min-w-[320px] h-[220px] rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-600 px-4 text-center"
             role="status"
           >
-            No data points in the last six months for this metric. After documents finish processing, matching
-            numbers (for example glucose, cholesterol) from the document text will appear here.
+            No values are available for this metric in the last six months. Once documents have completed processing
+            and the extracted text contains this measurement, the trend will display here.
           </div>
         ) : (
           <svg

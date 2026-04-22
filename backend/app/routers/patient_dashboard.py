@@ -300,7 +300,7 @@ async def get_patient_stats(
 async def get_patient_health_trends(
     metric: str = Query(
         "glucose",
-        description="One of: glucose, cholesterol, bp_systolic, heart_rate, weight",
+        description="One of: glucose, cholesterol, bp_systolic, hemoglobin, wbc, platelets",
     ),
     months: int = Query(6, ge=1, le=24),
     clinic_id: Optional[int] = Query(None),
@@ -313,7 +313,7 @@ async def get_patient_health_trends(
     Each processed document contributes at most one point per metric; multiple uploads in the same
     month all appear when their reference timestamps fall in the requested rolling window.
     """
-    allowed = {"glucose", "cholesterol", "bp_systolic", "heart_rate", "weight"}
+    allowed = {"glucose", "cholesterol", "bp_systolic", "hemoglobin", "wbc", "platelets"}
     if metric not in allowed:
         raise HTTPException(status_code=400, detail=f"Invalid metric. Allowed: {', '.join(sorted(allowed))}")
 
@@ -343,7 +343,7 @@ async def get_patient_health_trends(
         metric=mkey,
         clinic_id=clinic_id,
     )
-    points_raw, latest, weight_unit = build_monthly_points(
+    points_raw, latest, _weight_unit_hint = build_monthly_points(
         readings,
         num_months=months,
         metric=mkey,
@@ -355,12 +355,14 @@ async def get_patient_health_trends(
         unit = "mg/dL"
     elif metric == "bp_systolic":
         unit = "mmHg"
-    elif metric == "heart_rate":
-        unit = "bpm"
-    elif metric == "weight":
-        unit = "kg" if weight_unit == "kg" else "lb"
+    elif metric == "hemoglobin":
+        unit = "g/dL"
+    elif metric == "wbc":
+        unit = "/mm3"
+    elif metric == "platelets":
+        unit = "/mm3"
     else:
-        unit = "lb"
+        unit = ""
 
     return HealthTrendsResponse(
         metric=metric,

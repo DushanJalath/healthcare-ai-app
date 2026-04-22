@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from ..models.document import Document, DocumentStatus
 from ..models.extraction import Extraction, ExtractionStatus
 
-MetricKey = Literal["glucose", "cholesterol", "bp_systolic", "heart_rate", "weight"]
+MetricKey = Literal["glucose", "cholesterol", "bp_systolic", "hemoglobin", "wbc", "platelets"]
 
 
 def _ensure_aware(dt: Optional[datetime]) -> datetime:
@@ -97,49 +97,63 @@ def _parse_bp_systolic(text: str) -> Optional[float]:
     return None
 
 
-def _parse_heart_rate(text: str) -> Optional[float]:
+def _parse_hemoglobin(text: str) -> Optional[float]:
+    """Haemoglobin / hemoglobin (g/dL). Avoids MCH/MCHC/MCV lines."""
     if not text:
         return None
     patterns = [
-        r"heart\s+rate\s*[:(]\s*(\d{2,3})\s*(?:bpm)?",
-        r"\bpulse\s*[:(]\s*(\d{2,3})\s*(?:bpm)?",
-        r"(?:^|\s)HR\s*[:(]\s*(\d{2,3})\s*(?:bpm)?",
-        r"heart\s+rate\s+is\s+(\d{2,3})\b",
+        r"(?i)(?:haem|hem)oglobin\s*(?:[-–]\s*)?(?:concentration|level)?\s*(?:[:(]\s*)?(?:\n\s*|\s+)(\d{1,2}(?:\.\d+)?)\s*(?:g/?dl)?",
+        r"(?i)(?:haem|hem)oglobin\D{0,20}(\d{1,2}(?:\.\d+)?)\s*(?:g/?dl)",
+        r"(?i)\bhgb\b\s*[:(]?\s*(?:\n\s*|\s+)(\d{1,2}(?:\.\d+)?)\s*(?:g/?dl)?",
+        r"(?i)(?:^|[\n\r])\s*hb\s*[:(]?\s*(?:\n\s*|\s+)(\d{1,2}(?:\.\d+)?)\s*(?:g/?dl)?",
     ]
     for p in patterns:
-        m = re.search(p, text, re.IGNORECASE)
+        m = re.search(p, text, re.IGNORECASE | re.MULTILINE)
         if m:
             v = float(m.group(1))
-            if 25 <= v <= 250:
+            if 3.0 <= v <= 25.0:
                 return v
     return None
 
 
-def _parse_weight(text: str) -> Tuple[Optional[float], str]:
-    """Returns (value, unit) with unit 'kg' or 'lb' when detectable."""
+def _parse_wbc(text: str) -> Optional[float]:
+    """Total WBC / TLC (/mm3). Range filter drops percentages and RBC-scale numbers."""
     if not text:
-        return None, "lb"
-    m = re.search(
-        r"weight\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(kg|kgs|kilograms?|lbs?|pounds?)?",
-        text,
-        re.IGNORECASE,
-    )
-    if not m:
-        m = re.search(r"\bwt\.?\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(kg|kgs|lbs?)?", text, re.IGNORECASE)
-    if not m:
-        return None, "lb"
-    v = float(m.group(1))
-    if v < 15 or v > 500:
-        return None, "lb"
-    unit_raw = (m.group(2) or "").lower()
-    if unit_raw.startswith("kg") or "kilogram" in unit_raw:
-        return v, "kg"
-    if unit_raw.startswith("lb") or "pound" in unit_raw:
-        return v, "lb"
-    # Heuristic: small numbers in clinical text are often kg
-    if v < 90:
-        return v, "kg"
-    return v, "lb"
+        return None
+    patterns = [
+        r"(?i)total\s+leucocyte\s+count\s*(?:\(wbc\))?\s*(?:[:(]\s*)?(?:\n\s*|\s+)(\d{3,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul|cells)?",
+        r"(?i)total\s+leukocyte\s+count\s*(?:\(wbc\))?\s*(?:[:(]\s*)?(?:\n\s*|\s+)(\d{3,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul|cells)?",
+        r"(?i)total\s+leucocyte\s+count\D{0,30}(\d{3,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul)?",
+        r"(?i)total\s+leukocyte\s+count\D{0,30}(\d{3,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul)?",
+        r"(?i)white\s+blood(?:\s+cell)?\s+count\s*(?:\(wbc\))?\s*[:(]?\s*(?:\n\s*|\s+)(\d{3,6}(?:\.\d+)?)",
+        r"(?i)\btlc\b\s*[:(]?\s*(?:\n\s*|\s+)(\d{3,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul)?",
+        r"(?i)\bwbc\b\s*(?:count)?\s*[:(]?\s*(?:\n\s*|\s+)(\d{3,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul)?",
+    ]
+    for p in patterns:
+        m = re.search(p, text, re.IGNORECASE | re.MULTILINE)
+        if m:
+            v = float(m.group(1))
+            if 2500.0 <= v <= 100000.0:
+                return v
+    return None
+
+
+def _parse_platelets(text: str) -> Optional[float]:
+    """Platelet count (/mm3)."""
+    if not text:
+        return None
+    patterns = [
+        r"(?i)platelet(?:\s+count)?\s*(?:[:(]\s*)?(?:\n\s*|\s+)(\d{3,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul|cells)?",
+        r"(?i)platelet(?:\s+count)?\D{0,24}(\d{5,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul)?",
+        r"(?i)\bplt\b\s*[:(]?\s*(?:\n\s*|\s+)(\d{3,6}(?:\.\d+)?)\s*(?:/mm3|/µl|/ul)?",
+    ]
+    for p in patterns:
+        m = re.search(p, text, re.IGNORECASE | re.MULTILINE)
+        if m:
+            v = float(m.group(1))
+            if 15000.0 <= v <= 999000.0:
+                return v
+    return None
 
 
 def _parse_metric(text: str, metric: MetricKey) -> Optional[float]:
@@ -149,11 +163,12 @@ def _parse_metric(text: str, metric: MetricKey) -> Optional[float]:
         return _parse_total_cholesterol(text)
     if metric == "bp_systolic":
         return _parse_bp_systolic(text)
-    if metric == "heart_rate":
-        return _parse_heart_rate(text)
-    if metric == "weight":
-        w, _u = _parse_weight(text)
-        return w
+    if metric == "hemoglobin":
+        return _parse_hemoglobin(text)
+    if metric == "wbc":
+        return _parse_wbc(text)
+    if metric == "platelets":
+        return _parse_platelets(text)
     return None
 
 
@@ -166,7 +181,7 @@ def collect_document_metric_readings(
 ) -> List[Tuple[datetime, float, str]]:
     """
     Each tuple is (reference_datetime, value, weight_unit).
-    For non-weight metrics ``weight_unit`` is an empty string.
+    ``weight_unit`` is only used historically by the API; it is always ``""`` here.
     One value per document (first successful parse on that document's OCR text).
     """
     q = (
@@ -188,10 +203,7 @@ def collect_document_metric_readings(
         if not text:
             continue
         w_unit = ""
-        if metric == "weight":
-            val, w_unit = _parse_weight(text)
-        else:
-            val = _parse_metric(text, metric)
+        val = _parse_metric(text, metric)
         if val is None:
             continue
         ref = ext.completed_at or doc.processed_date or doc.upload_date
@@ -214,7 +226,7 @@ def build_monthly_points(
     in the same calendar month all appear (sorted by reference time). The rolling window
     is still ``num_months`` months back from the start of the current UTC month.
 
-    ``weight_unit_hint`` is ``kg`` or ``lb`` (for weight only; otherwise ``lb`` unused).
+    ``weight_unit_hint`` is returned as ``lb`` for API compatibility (unused).
     ``month_key`` on each point is the reading date ``YYYY-MM-DD`` for stable keys.
     """
     if not readings:
@@ -230,15 +242,16 @@ def build_monthly_points(
 
     latest_row = max(in_window, key=lambda x: x[0])
     latest_val = latest_row[1]
-    weight_unit = latest_row[2] if metric == "weight" and latest_row[2] else "lb"
+    weight_unit = "lb"
 
     in_window.sort(key=lambda x: x[0])
     points: List[dict] = []
     for _dt, val, _u in in_window:
-        display = round(val, 1) if metric == "weight" else round(val)
+        display = round(val, 1) if metric == "hemoglobin" else round(val)
         day = _dt.day
         label_dated = f"{_dt.strftime('%b')} {day}, {_dt.year}"
         month_key = _dt.date().isoformat()
         points.append({"label": label_dated, "value": float(display), "month_key": month_key})
 
-    return points, float(round(latest_val, 1) if metric == "weight" else round(latest_val)), weight_unit
+    latest_display = round(latest_val, 1) if metric == "hemoglobin" else round(latest_val)
+    return points, float(latest_display), weight_unit
