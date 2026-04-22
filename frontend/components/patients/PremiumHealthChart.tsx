@@ -7,8 +7,8 @@ const METRICS: { id: HealthTrendMetricId; label: string; unit: string }[] = [
   { id: 'glucose', label: 'Blood glucose', unit: 'mg/dL' },
   { id: 'cholesterol', label: 'Cholesterol level', unit: 'mg/dL' },
   { id: 'bp_systolic', label: 'Blood pressure (systolic)', unit: 'mmHg' },
-  { id: 'heart_rate', label: 'Heart rate', unit: 'bpm' },
-  { id: 'weight', label: 'Weight', unit: 'lb' },
+  // { id: 'heart_rate', label: 'Heart rate', unit: 'bpm' },
+  // { id: 'weight', label: 'Weight', unit: 'lb' },
 ]
 
 interface HealthTrendPoint {
