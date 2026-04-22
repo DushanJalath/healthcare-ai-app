@@ -33,26 +33,35 @@ def _ensure_aware(dt: Optional[datetime]) -> datetime:
 def _parse_glucose(text: str) -> Optional[float]:
     """
     Blood glucose from OCR text (fasting, random, post-prandial, serum/plasma).
-    Avoids ``< 140``-style reference cutoffs by not allowing ``<`` in the gap before the value.
+
+    Lab rows often place reference text (e.g. ``65.00 - 110.00``) before the patient result on one
+    OCR line; patterns that require ``mg/dl`` after the number prefer the true result (e.g. ``81.00``).
     """
     if not text:
         return None
     # ``[^\d<]`` blocks jumping past ``<`` into reference thresholds like ``< 140``.
     gap = r"[^\d<]{0,60}"
+    # Patient results on reports almost always show mg/dL (or mg/dl) next to the numeric result.
+    _mg = r"\s*(?:mg/?dl)\b"
     patterns = [
-        # Post-prandial (e.g. "POST PRANDIAL BLOOD SUGAR" + optional "(GLUCOSE" on next line + 64.00 mg/dl)
+        # --- Prefer value + mg/dl (skips reference range numbers on the same line as the test name) ---
+        r"(?i)fasting\s+blood\s+glucose(?:\s+venous)?[\s\S]{0,320}?(\d{2,3}(?:\.\d+)?)" + _mg,
+        r"(?i)fasting\s+blood\s+sugar(?:\s+venous)?[\s\S]{0,320}?(\d{2,3}(?:\.\d+)?)" + _mg,
+        r"(?i)random\s+blood\s+(?:glucose|sugar)[\s\S]{0,320}?(\d{2,3}(?:\.\d+)?)" + _mg,
+        r"(?i)post\s+prandial\s+blood\s+sugar(?:\s*\(?\s*glucose)?[\s\S]{0,320}?(\d{2,3}(?:\.\d+)?)" + _mg,
+        r"(?i)post\s+prandial\s+glucose\s*(?:\([^)]{0,40}\))?[\s\S]{0,320}?(\d{2,3}(?:\.\d+)?)" + _mg,
+        r"(?i)(?:serum|plasma)\s+glucose[\s\S]{0,240}?(\d{2,3}(?:\.\d+)?)" + _mg,
+        r"(?i)blood\s+glucose[\s\S]{0,240}?(\d{2,3}(?:\.\d+)?)" + _mg,
+        # --- Fallbacks when OCR drops units or uses tight layout ---
         r"(?i)post\s+prandial\s+blood\s+sugar(?:\s*\(?\s*glucose)?" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"(?i)post\s+prandial\s+glucose\s*(?:\([^)]{0,40}\))?\s*" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
-        # Fasting / blood glucose (e.g. "FASTING BLOOD GLUCOSE VENOUS" then 81.00)
         r"(?i)fasting\s+blood\s+glucose" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"(?i)fasting\s+blood\s+sugar" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"(?i)random\s+blood\s+(?:glucose|sugar)" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"(?i)blood\s+glucose" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"(?i)(?:serum|plasma)\s+glucose" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
-        # Label then value on following line (table OCR)
         r"(?i)(?:fasting|post\s+prandial|random|serum|plasma)?\s*blood\s+sugar\s*(?:[:(]\s*)?(?:\n\s*|\s{2,})(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"(?i)(?:fasting|post\s+prandial|random|serum|plasma)?\s*glucose\s*(?:\([^)]{0,40}\))?\s*(?:[:(]\s*)?(?:\n\s*|\s{2,})(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
-        # Classic "Glucose: 95" / FBS / abbreviations
         r"(?:fasting|random|serum|plasma)?\s*glucose\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"glucose\s*\([^)]{0,40}\)\s*[:(]\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"glucose[^:\n]{0,24}:\s*(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
@@ -60,6 +69,7 @@ def _parse_glucose(text: str) -> Optional[float]:
         r"\bfbs?\b\s*[:(]\s*(\d{2,3}(?:\.\d+)?)",
         r"\bfbg\b\s*[:(]\s*(\d{2,3}(?:\.\d+)?)",
         r"(?i)\bppbs?\b\s*[:(]?\s*" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
+        r"(?i)\brbs\b\s*[:(]?\s*" + gap + r"(\d{2,3}(?:\.\d+)?)\s*(?:mg/?dl)?",
         r"glucose\s*[:(]\s*(\d{2,3}(?:\.\d+)?)",
     ]
     for p in patterns:
